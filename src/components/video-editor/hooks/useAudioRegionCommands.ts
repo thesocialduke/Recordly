@@ -1,7 +1,7 @@
 import type { Span } from "dnd-timeline";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type { AudioRegion, EditorEffectSection } from "../types";
-import { isWebcamClipId } from "../webcamClips";
+import { getAudioRegionSpanPatch, isWebcamClipId } from "../webcamClips";
 
 interface UseAudioRegionCommandsParams {
 	setSelectedClipId: Dispatch<SetStateAction<string | null>>;
@@ -90,8 +90,7 @@ export function useAudioRegionCommands({
 					region.id === id
 						? {
 								...region,
-								startMs: Math.round(span.start),
-								endMs: Math.round(span.end),
+								...getAudioRegionSpanPatch(region, span),
 								...(normalizedTrackIndex === undefined
 									? {}
 									: { trackIndex: normalizedTrackIndex }),

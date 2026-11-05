@@ -350,7 +350,8 @@ export function useAudioPreviewSync({
 
 			if (isPlaying && isInRegion) {
 				enablePitchPreservingPlayback(audio);
-				const audioOffset = (currentTimeMs - startMs) / 1000;
+				const audioOffset =
+					(currentTimeMs - startMs + (track.sourceRef.sourceOffsetMs ?? 0)) / 1000;
 				if (Math.abs(audio.currentTime - audioOffset) > 0.2) {
 					audio.currentTime = audioOffset;
 				}

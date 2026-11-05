@@ -599,6 +599,7 @@ export class VideoExporter {
 			const trimRegions = this.config.trimRegions ?? [];
 			const canUsePrimaryAudioFiltergraph =
 				!requiresClipTimelineRendering(this.config.clipRegions) &&
+				!audioRegions.some((region) => region.sourceOffsetMs) &&
 				Boolean(primaryAudioSourcePath) &&
 				!hasTimedSourceAudioFallback &&
 				(usesEmbeddedPrimaryAudio ||

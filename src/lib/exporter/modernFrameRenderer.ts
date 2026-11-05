@@ -69,6 +69,7 @@ import {
 	getWebcamCornerRadiusPx,
 	getWebcamCropSourceRect,
 	getWebcamOverlayDimensionsPx,
+	getWebcamShapeDimensions,
 	getWebcamOverlayPosition,
 	isWebcamCropRegionDefault,
 	scaleWebcamOverlayPixels,
@@ -2836,22 +2837,28 @@ export class FrameRenderer {
 			liveSourceDimensions.height > 0
 				? liveSourceDimensions.height
 				: renderableWebcamSource.height;
-		const heightPercent = getCropMatchedWebcamHeightPercent(
-			widthPercent,
-			webcam.height ?? webcam.size ?? 50,
-			aspectSourceWidth,
-			aspectSourceHeight,
-			webcam.cropRegion,
+		const heightPercent =
+			webcam.shape === "circle"
+				? widthPercent
+				: getCropMatchedWebcamHeightPercent(
+						widthPercent,
+						webcam.height ?? webcam.size ?? 50,
+						aspectSourceWidth,
+						aspectSourceHeight,
+						webcam.cropRegion,
+					);
+		const dimensions = getWebcamShapeDimensions(
+			getWebcamOverlayDimensionsPx({
+				containerWidth: this.config.width,
+				containerHeight: this.config.height,
+				widthPercent,
+				heightPercent,
+				margin,
+				zoomScale: this.animationState.appliedScale || 1,
+				reactToZoom: webcam.reactToZoom ?? true,
+			}),
+			webcam.shape,
 		);
-		const dimensions = getWebcamOverlayDimensionsPx({
-			containerWidth: this.config.width,
-			containerHeight: this.config.height,
-			widthPercent,
-			heightPercent,
-			margin,
-			zoomScale: this.animationState.appliedScale || 1,
-			reactToZoom: webcam.reactToZoom ?? true,
-		});
 		const position = getWebcamOverlayPosition({
 			containerWidth: this.config.width,
 			containerHeight: this.config.height,
@@ -2867,6 +2874,7 @@ export class FrameRenderer {
 			webcam.roundness ?? DEFAULT_WEBCAM_ROUNDNESS,
 			dimensions.width,
 			dimensions.height,
+			webcam.shape,
 		);
 		const shadowStrength = getWebcamShadowStrength(webcam.shadow ?? 0);
 

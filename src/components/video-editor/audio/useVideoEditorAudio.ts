@@ -10,6 +10,7 @@ import { useSourceAudioFallback } from "./useSourceAudioFallback";
 import { isWebcamOnOutputTimeline } from "../videoPlayback/webcamSync";
 import {
 	applyWebcamClipSpan,
+	getSeparatedWebcamAudioRegions,
 	getWebcamClipTimelineRegions,
 	resolveWebcamClips,
 	splitWebcamClip,
@@ -54,6 +55,8 @@ interface UseVideoEditorAudioParams {
 	onSourceFallbackLoadError: (error: unknown) => void;
 	webcam: WebcamOverlaySettings;
 	setWebcam: React.Dispatch<React.SetStateAction<WebcamOverlaySettings>>;
+	setAudioRegions: React.Dispatch<React.SetStateAction<AudioRegion[]>>;
+	nextAudioIdRef: React.MutableRefObject<number>;
 }
 
 export function useVideoEditorAudio({
@@ -75,6 +78,8 @@ export function useVideoEditorAudio({
 	onSourceFallbackLoadError,
 	webcam,
 	setWebcam,
+	setAudioRegions,
+	nextAudioIdRef,
 }: UseVideoEditorAudioParams) {
 	const fallbackLookupSourcePath = useMemo(
 		() => extractLocalPathFromMediaServerUrl(currentSourcePath) ?? currentSourcePath,
@@ -184,6 +189,27 @@ export function useVideoEditorAudio({
 		},
 		[updateWebcamClips],
 	);
+	const separateWebcamAudio = useCallback(() => {
+		const clips = resolveWebcamClips(webcam, webcamDurationMs);
+		if (!webcam.sourcePath || clips.length === 0) {
+			return false;
+		}
+
+		const trackIndex = audioRegions.reduce(
+			(next, region) => Math.max(next, (region.trackIndex ?? 0) + 1),
+			0,
+		);
+		const regions = getSeparatedWebcamAudioRegions(
+			clips,
+			webcam.sourcePath,
+			webcam.audioVolume ?? 1,
+			trackIndex,
+			() => `audio-${nextAudioIdRef.current++}`,
+		);
+		setAudioRegions((current) => [...current, ...regions]);
+		setWebcam((previous) => ({ ...previous, audioEnabled: false }));
+		return true;
+	}, [audioRegions, nextAudioIdRef, setAudioRegions, setWebcam, webcam, webcamDurationMs]);
 	const webcamAudioTrack = useMemo(
 		() => resolveWebcamAudioTrack(webcam, webcamHasAudio),
 		[webcam, webcamHasAudio],
@@ -198,6 +224,7 @@ export function useVideoEditorAudio({
 		changeWebcamClipSpan,
 		deleteWebcamClip,
 		splitWebcamClipAt,
+		separateWebcamAudio,
 		webcamHasAudio,
 		webcamAudioTrack,
 		webcamPreviewVolume,

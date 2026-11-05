@@ -141,6 +141,7 @@ import {
 	getWebcamCropSourceRect,
 	getWebcamOverlayDimensionsPx,
 	getWebcamOverlayPosition,
+	getWebcamShapeDimensions,
 	scaleWebcamOverlayPixels,
 } from "./webcamOverlay";
 
@@ -804,13 +805,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const webcamShadow = webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW;
 		const webcamCropRegion = webcam?.cropRegion;
 		const webcamMirror = webcam?.mirror ?? false;
-		const webcamHeight = getCropMatchedWebcamHeightPercent(
-			webcamWidth,
-			rawWebcamHeight,
-			webcamVideoDimensions?.width,
-			webcamVideoDimensions?.height,
-			webcamCropRegion,
-		);
+		const webcamShape = webcam?.shape;
+		const webcamHeight =
+			webcamShape === "circle"
+				? webcamWidth
+				: getCropMatchedWebcamHeightPercent(
+						webcamWidth,
+						rawWebcamHeight,
+						webcamVideoDimensions?.width,
+						webcamVideoDimensions?.height,
+						webcamCropRegion,
+					);
 		const webcamCropPreviewContentStyle = useMemo<React.CSSProperties>(() => {
 			if (!webcamVideoDimensions) {
 				return { opacity: 0 };
@@ -866,19 +871,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				}
 				const scaledMargin = scaleWebcamOverlayPixels(webcamMargin, overlay.clientWidth);
 
-				const scaledDimensions = getWebcamOverlayDimensionsPx({
-					containerWidth: overlay.clientWidth,
-					containerHeight: overlay.clientHeight,
-					widthPercent: webcamWidth,
-					heightPercent: webcamHeight,
-					margin: scaledMargin,
-					zoomScale,
-					reactToZoom: webcamReactToZoom,
-				});
+				const scaledDimensions = getWebcamShapeDimensions(
+					getWebcamOverlayDimensionsPx({
+						containerWidth: overlay.clientWidth,
+						containerHeight: overlay.clientHeight,
+						widthPercent: webcamWidth,
+						heightPercent: webcamHeight,
+						margin: scaledMargin,
+						zoomScale,
+						reactToZoom: webcamReactToZoom,
+					}),
+					webcamShape,
+				);
 				const scaledRadius = getWebcamCornerRadiusPx(
 					webcamRoundness,
 					scaledDimensions.width,
 					scaledDimensions.height,
+					webcamShape,
 				);
 				const { x, y } = getWebcamOverlayPosition({
 					containerWidth: overlay.clientWidth,
@@ -928,6 +937,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				webcamPositionY,
 				webcamReactToZoom,
 				webcamShadow,
+				webcamShape,
 				webcamHeight,
 				webcamVideoPath,
 				webcamWidth,

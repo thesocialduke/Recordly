@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { resolveWebcamMediaTime } from "./videoPlayback/webcamSync";
 import {
 	applyWebcamClipSpan,
+	getAudioRegionSpanPatch,
+	getSeparatedWebcamAudioRegions,
 	getWebcamClipTimelineRegions,
 	isWebcamClipId,
 	resolveWebcamClips,
@@ -103,6 +105,50 @@ describe("resolveWebcamMediaTime with edited clips", () => {
 		expect(
 			resolveWebcamMediaTime({ webcam: { ...webcam, clips: [] }, clockTime: 2 }).active,
 		).toBe(false);
+	});
+});
+
+describe("separated webcam audio", () => {
+	it("keeps each piece of sound where the footage was and at its place in the file", () => {
+		let id = 7;
+		const regions = getSeparatedWebcamAudioRegions(
+			[{ id: "webcam-clip-2", startMs: 8000, endMs: 12_000, sourceStartMs: 20_000 }],
+			"/tmp/a.mp4",
+			0.5,
+			2,
+			() => `audio-${id++}`,
+		);
+		expect(regions).toEqual([
+			{
+				id: "audio-7",
+				startMs: 8000,
+				endMs: 12_000,
+				audioPath: "/tmp/a.mp4",
+				volume: 0.5,
+				trackIndex: 2,
+				sourceOffsetMs: 20_000,
+			},
+		]);
+	});
+
+	it("skips into the file on a left trim but keeps its place when moved", () => {
+		const region = { startMs: 8000, endMs: 12_000, sourceOffsetMs: 20_000 };
+		expect(getAudioRegionSpanPatch(region, { start: 9000, end: 12_000 })).toEqual({
+			startMs: 9000,
+			endMs: 12_000,
+			sourceOffsetMs: 21_000,
+		});
+		expect(getAudioRegionSpanPatch(region, { start: 9000, end: 13_000 })).toEqual({
+			startMs: 9000,
+			endMs: 13_000,
+			sourceOffsetMs: 20_000,
+		});
+	});
+
+	it("leaves ordinary audio clips behaving as before", () => {
+		expect(
+			getAudioRegionSpanPatch({ startMs: 1000, endMs: 5000 }, { start: 2000, end: 5000 }),
+		).toEqual({ startMs: 2000, endMs: 5000, sourceOffsetMs: undefined });
 	});
 });
 

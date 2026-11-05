@@ -520,6 +520,7 @@ interface SettingsPanelProps {
 	onBorderRadiusChange?: (radius: number) => void;
 	webcam?: WebcamOverlaySettings;
 	webcamHasAudio?: boolean;
+	onSeparateWebcamAudio?: () => boolean;
 	webcamPreviewSrc?: string | null;
 	webcamPreviewCurrentTime?: number;
 	webcamPreviewPlaying?: boolean;
@@ -970,6 +971,7 @@ export function SettingsPanel({
 	webcamPreviewCurrentTime = 0,
 	webcamPreviewPlaying = false,
 	webcamHasAudio = false,
+	onSeparateWebcamAudio,
 	onWebcamChange,
 	onUploadWebcam,
 	onClearWebcam,
@@ -3042,6 +3044,18 @@ export function SettingsPanel({
 									onCheckedChange={(enabled) => updateWebcam({ enabled })}
 								/>
 							</div>
+							<div className="flex items-center justify-between py-2">
+								<span className="text-xs text-muted-foreground">
+									{tSettings("effects.webcamCircle")}
+								</span>
+								<Switch
+									aria-label={tSettings("effects.webcamCircle")}
+									checked={webcam?.shape === "circle"}
+									onCheckedChange={(circle) =>
+										updateWebcam({ shape: circle ? "circle" : "rounded" })
+									}
+								/>
+							</div>
 							{advanced && (
 								<>
 									<div className="flex items-center justify-between py-2">
@@ -3082,7 +3096,7 @@ export function SettingsPanel({
 								onChange={(v) => updateWebcam({ width: v, size: v })}
 								formatValue={(v) => `${Math.round(v)}%`}
 							/>
-							{advanced && (
+							{advanced && webcam?.shape !== "circle" && (
 								<SliderControl
 									label={tSettings("effects.webcamHeight", "Webcam Height")}
 									value={webcamHeight}
@@ -3227,15 +3241,17 @@ export function SettingsPanel({
 									formatValue={(v) => `${Math.round(v)}px`}
 								/>
 							)}
-							<SliderControl
-								label={tSettings("effects.webcamRoundness")}
-								value={webcam?.roundness ?? DEFAULT_WEBCAM_ROUNDNESS}
-								min={0}
-								max={100}
-								step={1}
-								onChange={(v) => updateWebcam({ roundness: v })}
-								formatValue={(v) => `${Math.round(v)}%`}
-							/>
+							{webcam?.shape !== "circle" && (
+								<SliderControl
+									label={tSettings("effects.webcamRoundness")}
+									value={webcam?.roundness ?? DEFAULT_WEBCAM_ROUNDNESS}
+									min={0}
+									max={100}
+									step={1}
+									onChange={(v) => updateWebcam({ roundness: v })}
+									formatValue={(v) => `${Math.round(v)}%`}
+								/>
+							)}
 							{advanced && (
 								<SliderControl
 									label={tSettings("effects.webcamShadow")}
@@ -3286,6 +3302,24 @@ export function SettingsPanel({
 											onChange={(v) => updateWebcam({ audioVolume: v })}
 											formatValue={(v) => `${Math.round(v * 100)}%`}
 										/>
+									)}
+									{(webcam?.audioEnabled ?? DEFAULT_WEBCAM_AUDIO_ENABLED) && (
+										<Button
+											type="button"
+											variant="outline"
+											onClick={() => {
+												if (onSeparateWebcamAudio?.()) {
+													toast.success(
+														tSettings("effects.webcamAudioSeparated"),
+													);
+												}
+											}}
+											className="my-1 h-9 w-full min-w-0 justify-start gap-2 px-3"
+										>
+											<span className="truncate">
+												{tSettings("effects.webcamSeparateAudio")}
+											</span>
+										</Button>
 									)}
 								</>
 							)}

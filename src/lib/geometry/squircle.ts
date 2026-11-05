@@ -15,6 +15,9 @@ interface SquirclePoint {
 
 const SQUIRCLE_EXPONENT = 4.5;
 const SQUIRCLE_SEGMENTS_PER_CORNER = 10;
+const CIRCLE_SEGMENTS = 180;
+/** Pass as the radius to draw a true circle; a squircle stays visibly squarish at full radius. */
+export const TRUE_CIRCLE_RADIUS = -1;
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
@@ -44,6 +47,16 @@ export function getSquirclePathPoints({
 }: SquircleRect): SquirclePoint[] {
 	if (width <= 0 || height <= 0) {
 		return [];
+	}
+
+	if (radius === TRUE_CIRCLE_RADIUS) {
+		return Array.from({ length: CIRCLE_SEGMENTS }, (_, index) => {
+			const angle = (index / CIRCLE_SEGMENTS) * Math.PI * 2;
+			return {
+				x: x + width / 2 + (width / 2) * Math.cos(angle),
+				y: y + height / 2 + (height / 2) * Math.sin(angle),
+			};
+		});
 	}
 
 	const clampedRadius = getClampedRadius(width, height, radius);

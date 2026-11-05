@@ -1,4 +1,6 @@
 import type { CropRegion, WebcamCorner, WebcamPositionPreset } from "./types";
+import type { WebcamOverlaySettings } from "./types";
+import { TRUE_CIRCLE_RADIUS } from "@/lib/geometry/squircle";
 
 const MIN_WEBCAM_OVERLAY_SIZE_PX = 56;
 export const WEBCAM_REFERENCE_VIEWPORT_WIDTH = 1920;
@@ -14,11 +16,27 @@ export function scaleWebcamOverlayPixels(value: number, containerWidth: number):
 	return safeValue * (safeWidth / WEBCAM_REFERENCE_VIEWPORT_WIDTH);
 }
 
+/** A circle needs equal sides, so it takes the shorter of the two. */
+export function getWebcamShapeDimensions<T extends { width: number; height: number }>(
+	dimensions: T,
+	shape: WebcamOverlaySettings["shape"],
+): T {
+	if (shape !== "circle") {
+		return dimensions;
+	}
+	const side = Math.min(dimensions.width, dimensions.height);
+	return { ...dimensions, width: side, height: side };
+}
+
 export function getWebcamCornerRadiusPx(
 	roundnessPercent: number,
 	width: number,
 	height: number,
+	shape?: WebcamOverlaySettings["shape"],
 ): number {
+	if (shape === "circle") {
+		return TRUE_CIRCLE_RADIUS;
+	}
 	const safeRoundness = Number.isFinite(roundnessPercent) ? clamp(roundnessPercent, 0, 100) : 0;
 	const strengthenedRoundness = Math.sqrt(safeRoundness / 100);
 	return (Math.max(0, Math.min(width, height)) / 2) * strengthenedRoundness;

@@ -102,6 +102,8 @@ export function useTimelineEditingController(input: Input) {
 		onSourceFallbackLoadError: handleSourceFallbackLoadError,
 		webcam: input.appearance.webcam,
 		setWebcam: input.appearance.setWebcam,
+		setAudioRegions: timeline.setAudioRegions,
+		nextAudioIdRef: input.nextAudioIdRef,
 	});
 	const playback = useEditorPlaybackControls({
 		videoPlaybackRef: input.videoPlaybackRef,

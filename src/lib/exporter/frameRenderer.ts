@@ -60,6 +60,7 @@ import {
 	getWebcamCornerRadiusPx,
 	getWebcamCropSourceRect,
 	getWebcamOverlayDimensionsPx,
+	getWebcamShapeDimensions,
 	getWebcamOverlayPosition,
 	scaleWebcamOverlayPixels,
 } from "@/components/video-editor/webcamOverlay";
@@ -1889,22 +1890,28 @@ export class FrameRenderer {
 					: webcamFrameSource.height) || sourceWidth;
 		const margin = scaleWebcamOverlayPixels(webcam.margin ?? 24, width);
 		const widthPercent = webcam.width ?? webcam.size ?? 50;
-		const heightPercent = getCropMatchedWebcamHeightPercent(
-			widthPercent,
-			webcam.height ?? webcam.size ?? 50,
-			sourceWidth,
-			sourceHeight,
-			webcam.cropRegion,
+		const heightPercent =
+			webcam.shape === "circle"
+				? widthPercent
+				: getCropMatchedWebcamHeightPercent(
+						widthPercent,
+						webcam.height ?? webcam.size ?? 50,
+						sourceWidth,
+						sourceHeight,
+						webcam.cropRegion,
+					);
+		const dimensions = getWebcamShapeDimensions(
+			getWebcamOverlayDimensionsPx({
+				containerWidth: width,
+				containerHeight: height,
+				widthPercent,
+				heightPercent,
+				margin,
+				zoomScale: this.animationState.appliedScale || 1,
+				reactToZoom: webcam.reactToZoom ?? true,
+			}),
+			webcam.shape,
 		);
-		const dimensions = getWebcamOverlayDimensionsPx({
-			containerWidth: width,
-			containerHeight: height,
-			widthPercent,
-			heightPercent,
-			margin,
-			zoomScale: this.animationState.appliedScale || 1,
-			reactToZoom: webcam.reactToZoom ?? true,
-		});
 		const { x, y } = getWebcamOverlayPosition({
 			containerWidth: width,
 			containerHeight: height,
@@ -1920,6 +1927,7 @@ export class FrameRenderer {
 			webcam.roundness ?? DEFAULT_WEBCAM_ROUNDNESS,
 			dimensions.width,
 			dimensions.height,
+			webcam.shape,
 		);
 		const bubbleWidth = Math.max(1, Math.ceil(dimensions.width));
 		const bubbleHeight = Math.max(1, Math.ceil(dimensions.height));
