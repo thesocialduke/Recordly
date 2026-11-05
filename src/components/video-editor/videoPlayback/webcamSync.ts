@@ -134,6 +134,66 @@ export function isWebcamOnOutputTimeline(
 	return !/-webcam\.[^.]+$/i.test(fileName);
 }
 
+/** Maps a clock time to the footage frame to show, and whether any footage covers that time. */
+export function resolveWebcamMediaTime({
+	webcam,
+	clockTime,
+	webcamDuration,
+}: {
+	webcam:
+		| {
+				sourcePath?: string | null;
+				visibleRanges?: unknown;
+				timeOffsetMs?: number | null;
+				clips?: { id: string; startMs: number; endMs: number; sourceStartMs: number }[];
+		  }
+		| null
+		| undefined;
+	clockTime: number;
+	webcamDuration?: number | null;
+}): { mediaTime: number; active: boolean; clipId: string | null } {
+	if (webcam?.clips && isWebcamOnOutputTimeline(webcam)) {
+		const timeMs = clockTime * 1000;
+		const ordered = [...webcam.clips].sort((a, b) => a.startMs - b.startMs);
+		const clip = ordered.find(({ startMs, endMs }) => timeMs >= startMs && timeMs < endMs);
+		if (clip) {
+			return {
+				mediaTime: clampMediaTimeToDuration(
+					(clip.sourceStartMs + timeMs - clip.startMs) / 1000,
+					webcamDuration,
+				),
+				active: true,
+				clipId: clip.id,
+			};
+		}
+
+		// Holding position between clips keeps the forward-only export decoder from rewinding.
+		const previous = ordered.filter(({ endMs }) => endMs <= timeMs).pop();
+		const heldMs = previous
+			? previous.sourceStartMs + previous.endMs - previous.startMs
+			: (ordered[0]?.sourceStartMs ?? 0);
+		return {
+			mediaTime: clampMediaTimeToDuration(heldMs / 1000, webcamDuration),
+			active: false,
+			clipId: null,
+		};
+	}
+
+	return {
+		mediaTime: getWebcamMediaTargetTimeSeconds({
+			currentTime: clockTime,
+			webcamDuration,
+			timeOffsetMs: webcam?.timeOffsetMs,
+		}),
+		active: isWebcamFootageActive({
+			currentTime: clockTime,
+			webcamDuration,
+			timeOffsetMs: webcam?.timeOffsetMs,
+		}),
+		clipId: null,
+	};
+}
+
 /** True while the timeline sits inside the footage, after applying its start offset. */
 export function isWebcamFootageActive({
 	currentTime,

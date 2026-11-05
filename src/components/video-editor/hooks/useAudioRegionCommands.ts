@@ -1,6 +1,7 @@
 import type { Span } from "dnd-timeline";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type { AudioRegion, EditorEffectSection } from "../types";
+import { isWebcamClipId } from "../webcamClips";
 
 interface UseAudioRegionCommandsParams {
 	setSelectedClipId: Dispatch<SetStateAction<string | null>>;
@@ -33,7 +34,7 @@ export function useAudioRegionCommands({
 				setSelectedAnnotationId(null);
 				setSelectedClipId(null);
 				setSelectedCaptionId(null);
-				setActiveEffectSection("audio");
+				setActiveEffectSection(isWebcamClipId(id) ? "webcam" : "audio");
 			}
 		},
 		[

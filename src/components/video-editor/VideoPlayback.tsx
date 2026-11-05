@@ -123,11 +123,10 @@ import {
 import {
 	getWebcamCorrectiveSeekTime,
 	getWebcamDriftCorrectedPlaybackRate,
-	getWebcamMediaTargetTimeSeconds,
-	isWebcamFootageActive,
 	isWebcamOnOutputTimeline,
 	isWebcamVisibleAtSourceTime,
 	isWebcamMediaSynchronized,
+	resolveWebcamMediaTime,
 	shouldSeekWebcamMedia,
 } from "./videoPlayback/webcamSync";
 import {
@@ -485,6 +484,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const layoutVideoContentRef = useRef<(() => void) | null>(null);
 		const lastWebcamSyncTimeRef = useRef<number | null>(null);
 		const webcamSeekStartedAtRef = useRef<number | null>(null);
+		const lastWebcamClipIdRef = useRef<string | null>(null);
 		const lastWebcamSeekDurationRef = useRef(0);
 		const lastBackgroundSyncTimeRef = useRef<number | null>(null);
 		const bgVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -802,7 +802,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const webcamCorner = webcam?.corner ?? "bottom-right";
 		const webcamRoundness = webcam?.roundness ?? DEFAULT_WEBCAM_ROUNDNESS;
 		const webcamShadow = webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW;
-		const webcamTimeOffsetMs = webcam?.timeOffsetMs;
 		const webcamCropRegion = webcam?.cropRegion;
 		const webcamMirror = webcam?.mirror ?? false;
 		const webcamHeight = getCropMatchedWebcamHeightPercent(
@@ -852,13 +851,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					!webcamVideoPath ||
 					!isWebcamVisibleAtSourceTime(webcam, currentTimeRef.current / 1000) ||
 					(webcamOnOutputTimeline &&
-						!isWebcamFootageActive({
-							currentTime: timelineTimeRef.current,
+						!resolveWebcamMediaTime({
+							webcam,
+							clockTime: timelineTimeRef.current,
 							webcamDuration: Number.isFinite(webcamVideoRef.current?.duration)
 								? webcamVideoRef.current?.duration
 								: null,
-							timeOffsetMs: webcam?.timeOffsetMs,
-						}))
+						}).active)
 				) {
 					if (bubble) {
 						bubble.style.display = "none";
@@ -1619,11 +1618,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const webcamClockTime = webcamOnOutputTimeline
 				? timelineTime
 				: currentTimeRef.current / 1000;
-			const targetTime = getWebcamMediaTargetTimeSeconds({
-				currentTime: webcamClockTime,
+			const webcamMedia = resolveWebcamMediaTime({
+				webcam,
+				clockTime: webcamClockTime,
 				webcamDuration,
-				timeOffsetMs: webcamTimeOffsetMs,
 			});
+			const targetTime = webcamMedia.mediaTime;
+			const crossedWebcamCut = webcamMedia.clipId !== lastWebcamClipIdRef.current;
+			lastWebcamClipIdRef.current = webcamMedia.clipId;
 			const mediaTargetTime =
 				targetTime <= 0 && webcamDuration !== null && webcamDuration > 0
 					? Math.min(1 / 60, webcamDuration)
@@ -1663,11 +1665,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			// ended video restarts it from zero, which then fights the corrective seek.
 			if (
 				(isGap && !webcamOnOutputTimeline) ||
-				!isWebcamFootageActive({
-					currentTime: webcamClockTime,
-					webcamDuration,
-					timeOffsetMs: webcamTimeOffsetMs,
-				})
+				!webcamMedia.active
 			) {
 				webcamVideo.pause();
 				if (
@@ -1705,6 +1703,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 			const previousTimelineTime = lastWebcamSyncTimeRef.current;
 			if (
+				(crossedWebcamCut && !webcamVideo.seeking) ||
 				shouldSeekWebcamMedia({
 					desiredTime: mediaTargetTime,
 					isPlaying,
@@ -1743,9 +1742,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			clipRegions,
 			isGap,
 			isPlaying,
+			webcam,
 			webcamEnabled,
 			webcamOnOutputTimeline,
-			webcamTimeOffsetMs,
 			webcamVideoPath,
 		]);
 

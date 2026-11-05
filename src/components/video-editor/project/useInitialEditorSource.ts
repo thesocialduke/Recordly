@@ -171,6 +171,7 @@ export function useInitialEditorSource({
 					appearance.setWebcam((previous) => ({
 						...previous,
 						visibleRanges: undefined,
+						clips: undefined,
 						enabled: Boolean(sessionResult.session?.webcamPath),
 						sourcePath: sessionResult.session?.webcamPath ?? null,
 						timeOffsetMs:
@@ -224,6 +225,7 @@ export function useInitialEditorSource({
 			appearance.setWebcam((previous) => ({
 				...previous,
 				visibleRanges: undefined,
+				clips: webcamPath === previous.sourcePath ? previous.clips : undefined,
 				enabled: Boolean(webcamPath),
 				sourcePath: webcamPath,
 				timeOffsetMs: webcamPath

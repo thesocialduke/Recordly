@@ -45,10 +45,9 @@ import {
 import { getSceneEffectMetrics } from "@/components/video-editor/videoPlayback/sceneEffects";
 import { resolveSceneZoomTarget } from "@/components/video-editor/videoPlayback/sceneMotion";
 import {
-	getWebcamMediaTargetTimeSeconds,
-	isWebcamFootageActive,
 	isWebcamOnOutputTimeline,
 	isWebcamVisibleAtSourceTime,
+	resolveWebcamMediaTime,
 } from "@/components/video-editor/videoPlayback/webcamSync";
 import {
 	applyZoomTransform,
@@ -1243,13 +1242,13 @@ export class FrameRenderer {
 	}
 
 	private async syncWebcamFrame(targetTime: number): Promise<void> {
-		const webcamTargetTime = getWebcamMediaTargetTimeSeconds({
-			currentTime: targetTime,
+		const webcamTargetTime = resolveWebcamMediaTime({
+			webcam: this.config.webcam,
+			clockTime: targetTime,
 			webcamDuration: Number.isFinite(this.webcamVideoElement?.duration)
 				? this.webcamVideoElement?.duration
 				: null,
-			timeOffsetMs: this.config.webcam?.timeOffsetMs,
-		});
+		}).mediaTime;
 
 		if (this.webcamForwardFrameSource) {
 			const clampedTime = clampMediaTimeToDuration(webcamTargetTime, null);
@@ -1774,13 +1773,13 @@ export class FrameRenderer {
 			return false;
 		}
 		const elementDuration = this.webcamVideoElement?.duration;
-		return !isWebcamFootageActive({
-			currentTime: clockTime,
+		return !resolveWebcamMediaTime({
+			webcam: this.config.webcam,
+			clockTime,
 			webcamDuration:
 				this.webcamForwardFrameSource?.getDurationSec() ??
 				(Number.isFinite(elementDuration) ? elementDuration : null),
-			timeOffsetMs: this.config.webcam?.timeOffsetMs,
-		});
+		}).active;
 	}
 
 	private drawWebcamOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -1817,11 +1816,11 @@ export class FrameRenderer {
 		}
 		this.webcamBubbleCtx = bubbleCtx;
 
-		const expectedWebcamTargetTime = getWebcamMediaTargetTimeSeconds({
-			currentTime: this.getWebcamClockTime(),
+		const expectedWebcamTargetTime = resolveWebcamMediaTime({
+			webcam,
+			clockTime: this.getWebcamClockTime(),
 			webcamDuration: Number.isFinite(webcamVideo?.duration) ? webcamVideo?.duration : null,
-			timeOffsetMs: webcam.timeOffsetMs,
-		});
+		}).mediaTime;
 
 		const canRefreshCache =
 			hasLiveWebcamFrame &&

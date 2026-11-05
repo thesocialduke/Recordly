@@ -133,6 +133,14 @@ export type WebcamPositionPreset =
 	| "bottom-center"
 	| "custom";
 
+/** A piece of added footage placed on the edit's timeline. */
+export interface WebcamClip {
+	id: string;
+	startMs: number;
+	endMs: number;
+	sourceStartMs: number;
+}
+
 export interface WebcamOverlaySettings {
 	/** Source-time intervals containing webcam footage in an imported sequence. */
 	visibleRanges?: { startMs: number; endMs: number }[];
@@ -142,6 +150,8 @@ export interface WebcamOverlaySettings {
 	/** Mixes the footage's own sound into preview and export when it has any. */
 	audioEnabled?: boolean;
 	audioVolume?: number;
+	/** Set once the footage is edited on the timeline; replaces the start offset. */
+	clips?: WebcamClip[];
 	mirror: boolean;
 	cropRegion: CropRegion;
 	corner: WebcamCorner;
@@ -569,6 +579,8 @@ export interface AudioRegion {
 	volume: number;
 	normalize?: boolean;
 	trackIndex?: number;
+	/** Where in the audio file this region starts playing. */
+	sourceOffsetMs?: number;
 }
 
 export interface CaptionCue {

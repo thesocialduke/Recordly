@@ -1,4 +1,5 @@
 import { formatClipSpeedLabel } from "../../clipSpeedChange";
+import { isWebcamClipId, WEBCAM_TIMELINE_TRACK_INDEX } from "../../webcamClips";
 import type {
 	AnnotationRegion,
 	AudioRegion,
@@ -91,7 +92,9 @@ export function buildTimelineItems(params: {
 		id: region.id,
 		rowId: getAudioTrackRowId(region.trackIndex ?? 0),
 		span: { start: region.startMs, end: region.endMs },
-		label: getAudioLabel(region),
+		label: isWebcamClipId(region.id)
+			? `Webcam: ${getAudioLabel(region)}`
+			: getAudioLabel(region),
 		audioPath: region.audioPath,
 		audioGain: region.volume,
 		audioNormalize: Boolean(region.normalize),
@@ -171,7 +174,10 @@ export function resolveDropRowId(
 	}
 
 	if (isAudioTrackRowId(currentRowId)) {
-		return isAudioTrackRowId(proposedRowId)
+		// The webcam row holds only webcam clips, and they stay on it.
+		return isAudioTrackRowId(proposedRowId) &&
+			!isWebcamClipId(id) &&
+			getAudioTrackIndex(proposedRowId) !== WEBCAM_TIMELINE_TRACK_INDEX
 			? getAudioTrackRowId(getAudioTrackIndex(proposedRowId))
 			: currentRowId;
 	}

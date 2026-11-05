@@ -3247,7 +3247,7 @@ export function SettingsPanel({
 									formatValue={(v) => `${Math.round(v * 100)}%`}
 								/>
 							)}
-							{webcam?.sourcePath && (
+							{webcam?.sourcePath && !webcam.clips && (
 								<SliderControl
 									label={tSettings("effects.webcamStartOffset")}
 									value={(webcam.timeOffsetMs ?? 0) / 1000}
