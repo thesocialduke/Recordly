@@ -153,6 +153,7 @@ export class AudioProcessor extends AudioTranscodeProcessor {
 			requiresClipTimelineRendering(clipRegions) ||
 			sortedSpeedRegions.length > 0 ||
 			sortedAudioRegions.length > 0 ||
+			this.webcamAudioTrack ||
 			needsSourceAudioMixing ||
 			hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings) ||
 			(clipRegions ?? []).some((clip) => Boolean(clip.muted))

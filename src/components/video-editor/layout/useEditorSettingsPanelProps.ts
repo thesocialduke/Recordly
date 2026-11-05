@@ -35,6 +35,7 @@ type Input = {
 	isGeneratingCaptions: boolean;
 	sessionNativeCaptureUnavailable: boolean;
 	setNativeCaptureUnavailableModalOpen: Dispatch<SetStateAction<boolean>>;
+	webcamHasAudio: boolean;
 	handleUploadWebcam: () => void;
 	handleClearWebcam: () => void;
 };
@@ -63,6 +64,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		isGeneratingCaptions,
 		sessionNativeCaptureUnavailable,
 		setNativeCaptureUnavailableModalOpen,
+		webcamHasAudio,
 		handleUploadWebcam,
 		handleClearWebcam,
 	} = input;
@@ -172,6 +174,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		borderRadius: appearance.borderRadius,
 		onBorderRadiusChange: appearance.setBorderRadius,
 		webcam: appearance.webcam,
+		webcamHasAudio,
 		webcamPreviewSrc: appearance.webcam.sourcePath ? appearance.resolvedWebcamVideoUrl : null,
 		webcamPreviewCurrentTime:
 			mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions) / 1000,

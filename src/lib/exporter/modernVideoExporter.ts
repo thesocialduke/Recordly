@@ -48,6 +48,7 @@ import {
 	isVideoWallpaperSource,
 } from "@/lib/wallpapers";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
+import type { WebcamAudioTrack } from "./audioProcessorShared";
 import {
 	getDefaultLightningRenderBackend,
 	normalizeLightningRuntimePlatform,
@@ -150,6 +151,7 @@ interface VideoExporterConfig extends ExportConfig {
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
+	webcamAudioTrack?: WebcamAudioTrack | null;
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -820,9 +822,11 @@ export class ModernVideoExporter {
 					if (
 						demuxer ||
 						(this.config.audioRegions ?? []).length > 0 ||
-						(this.config.sourceAudioFallbackPaths ?? []).length > 0
+						(this.config.sourceAudioFallbackPaths ?? []).length > 0 ||
+						this.config.webcamAudioTrack
 					) {
 						this.audioProcessor = new AudioProcessor();
+						this.audioProcessor.setWebcamAudioTrack(this.config.webcamAudioTrack);
 						this.audioProcessor.setOnProgress((progress) => {
 							this.reportFinalizingProgress(totalFrames, 99, progress);
 						});
@@ -1482,7 +1486,8 @@ export class ModernVideoExporter {
 		if (
 			!videoInfo.hasAudio &&
 			sourceAudioFallbackPaths.length === 0 &&
-			audioRegions.length === 0
+			audioRegions.length === 0 &&
+			!this.config.webcamAudioTrack
 		) {
 			return { audioMode: "none" };
 		}
@@ -1491,6 +1496,7 @@ export class ModernVideoExporter {
 			requiresClipTimelineRendering(this.config.clipRegions) ||
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
+			this.config.webcamAudioTrack ||
 			sourceAudioFallbackPaths.length > 1 ||
 			hasTimedSourceAudioFallback ||
 			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
@@ -1516,6 +1522,7 @@ export class ModernVideoExporter {
 				primaryAudioSourceSampleRate > 0;
 			const requiresRenderedEditedTrack =
 				requiresClipTimelineRendering(this.config.clipRegions) ||
+				Boolean(this.config.webcamAudioTrack) ||
 				hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
 				(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted));
 			const strategy =
@@ -2139,6 +2146,7 @@ export class ModernVideoExporter {
 		sourceAudioFallbackPaths = this.config.sourceAudioFallbackPaths,
 	) {
 		this.audioProcessor = new AudioProcessor();
+		this.audioProcessor.setWebcamAudioTrack(this.config.webcamAudioTrack);
 		this.audioProcessor.setOnProgress(onProgress);
 		const audioBlob = await this.measureFinalizationStage("editedAudioRenderMs", async () =>
 			this.awaitWithFinalizationTimeout(

@@ -309,6 +309,16 @@ export class ForwardFrameSource {
 		return null;
 	}
 
+	getDurationSec(): number | null {
+		if (!this.metadata) return null;
+		return (
+			getEffectiveVideoStreamDurationSeconds({
+				duration: this.metadata.duration,
+				streamDuration: this.metadata.streamDuration,
+			}) || null
+		);
+	}
+
 	getResolvedDurationSec(): number | null {
 		return this.resolvedDecodedDurationSec;
 	}

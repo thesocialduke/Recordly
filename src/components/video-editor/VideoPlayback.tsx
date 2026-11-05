@@ -121,7 +121,11 @@ import {
 	shouldComposePreviewFrame,
 } from "./videoPlayback/sceneMotion";
 import {
+	getWebcamCorrectiveSeekTime,
+	getWebcamDriftCorrectedPlaybackRate,
 	getWebcamMediaTargetTimeSeconds,
+	isWebcamFootageActive,
+	isWebcamOnOutputTimeline,
 	isWebcamVisibleAtSourceTime,
 	isWebcamMediaSynchronized,
 	shouldSeekWebcamMedia,
@@ -250,6 +254,7 @@ interface VideoPlaybackProps {
 	cropRegion?: import("./types").CropRegion;
 	webcam?: WebcamOverlaySettings;
 	webcamVideoPath?: string | null;
+	webcamVolume?: number;
 	aspectRatio: AspectRatio;
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
@@ -336,6 +341,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cropRegion,
 			webcam,
 			webcamVideoPath,
+			webcamVolume = 0,
 			aspectRatio,
 			annotationRegions = [],
 			autoCaptions = [],
@@ -478,6 +484,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		} | null>(null);
 		const layoutVideoContentRef = useRef<(() => void) | null>(null);
 		const lastWebcamSyncTimeRef = useRef<number | null>(null);
+		const webcamSeekStartedAtRef = useRef<number | null>(null);
+		const lastWebcamSeekDurationRef = useRef(0);
 		const lastBackgroundSyncTimeRef = useRef<number | null>(null);
 		const bgVideoRef = useRef<HTMLVideoElement | null>(null);
 		const connectZoomsRef = useRef(connectZooms);
@@ -783,6 +791,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [activeCaptionLayout, autoCaptionSettings]);
 		const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
 		const webcamEnabled = webcam?.enabled ?? false;
+		const webcamOnOutputTimeline = isWebcamOnOutputTimeline(webcam);
 		const webcamMargin = webcam?.margin ?? 24;
 		const webcamWidth = webcam?.width ?? webcam?.size ?? DEFAULT_WEBCAM_SIZE;
 		const rawWebcamHeight = webcam?.height ?? webcam?.size ?? DEFAULT_WEBCAM_SIZE;
@@ -841,7 +850,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					!overlay ||
 					!webcamEnabled ||
 					!webcamVideoPath ||
-					!isWebcamVisibleAtSourceTime(webcam, currentTimeRef.current / 1000)
+					!isWebcamVisibleAtSourceTime(webcam, currentTimeRef.current / 1000) ||
+					(webcamOnOutputTimeline &&
+						!isWebcamFootageActive({
+							currentTime: timelineTimeRef.current,
+							webcamDuration: Number.isFinite(webcamVideoRef.current?.duration)
+								? webcamVideoRef.current?.duration
+								: null,
+							timeOffsetMs: webcam?.timeOffsetMs,
+						}))
 				) {
 					if (bubble) {
 						bubble.style.display = "none";
@@ -906,6 +923,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				webcam,
 				webcamEnabled,
 				webcamMargin,
+				webcamOnOutputTimeline,
 				webcamPositionPreset,
 				webcamPositionX,
 				webcamPositionY,
@@ -1598,8 +1616,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const webcamDuration = Number.isFinite(webcamVideo.duration)
 				? webcamVideo.duration
 				: null;
+			const webcamClockTime = webcamOnOutputTimeline
+				? timelineTime
+				: currentTimeRef.current / 1000;
 			const targetTime = getWebcamMediaTargetTimeSeconds({
-				currentTime: currentTimeRef.current / 1000,
+				currentTime: webcamClockTime,
 				webcamDuration,
 				timeOffsetMs: webcamTimeOffsetMs,
 			});
@@ -1638,15 +1659,48 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				lastWebcamSyncTimeRef.current = targetTime;
 			}
 
-			const targetPlaybackRate =
-				findClipAtTimelineTime(timelineTime * 1000, clipRegions)?.speed ?? 1;
+			// Outside the footage the element must stay paused: calling play() on an
+			// ended video restarts it from zero, which then fights the corrective seek.
+			if (
+				(isGap && !webcamOnOutputTimeline) ||
+				!isWebcamFootageActive({
+					currentTime: webcamClockTime,
+					webcamDuration,
+					timeOffsetMs: webcamTimeOffsetMs,
+				})
+			) {
+				webcamVideo.pause();
+				if (
+					!webcamVideo.seeking &&
+					Math.abs(webcamVideo.currentTime - mediaTargetTime) > 0.01
+				) {
+					try {
+						webcamVideo.currentTime = mediaTargetTime;
+					} catch {
+						// no-op
+					}
+				}
+				lastWebcamSyncTimeRef.current = targetTime;
+				return;
+			}
+
+			const targetPlaybackRate = webcamOnOutputTimeline
+				? 1
+				: (findClipAtTimelineTime(timelineTime * 1000, clipRegions)?.speed ?? 1);
 			if (!supportsPreviewPlaybackRate(targetPlaybackRate)) {
 				webcamVideo.pause();
 				return;
 			}
 			enablePitchPreservingPlayback(webcamVideo);
-			if (Math.abs(webcamVideo.playbackRate - targetPlaybackRate) > 0.001) {
-				webcamVideo.playbackRate = targetPlaybackRate;
+			const correctedPlaybackRate = isPlaying
+				? getWebcamDriftCorrectedPlaybackRate({
+						baseRate: targetPlaybackRate,
+						desiredTime: mediaTargetTime,
+						webcamCurrentTime: webcamVideo.currentTime,
+					})
+				: targetPlaybackRate;
+			if (Math.abs(webcamVideo.playbackRate - correctedPlaybackRate) > 0.001) {
+				webcamVideo.playbackRate = correctedPlaybackRate;
 			}
 
 			const previousTimelineTime = lastWebcamSyncTimeRef.current;
@@ -1661,7 +1715,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				})
 			) {
 				try {
-					webcamVideo.currentTime = mediaTargetTime;
+					webcamSeekStartedAtRef.current = performance.now();
+					webcamVideo.currentTime = isPlaying
+						? getWebcamCorrectiveSeekTime({
+								desiredTime: mediaTargetTime,
+								lastSeekDurationSeconds: lastWebcamSeekDurationRef.current,
+								webcamDuration,
+							})
+						: mediaTargetTime;
 				} catch {
 					// no-op
 				}
@@ -1680,8 +1741,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [
 			timelineTime,
 			clipRegions,
+			isGap,
 			isPlaying,
 			webcamEnabled,
+			webcamOnOutputTimeline,
 			webcamTimeOffsetMs,
 			webcamVideoPath,
 		]);
@@ -1689,6 +1752,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const handleWebcamMediaReady = useCallback(
 			(event: React.SyntheticEvent<HTMLVideoElement>) => {
 				const video = event.currentTarget;
+				if (event.type === "seeked" && webcamSeekStartedAtRef.current !== null) {
+					lastWebcamSeekDurationRef.current =
+						(performance.now() - webcamSeekStartedAtRef.current) / 1000;
+					webcamSeekStartedAtRef.current = null;
+				}
 				if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
 					setWebcamVideoDimensions({
 						width: video.videoWidth,
@@ -1703,6 +1771,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			syncWebcamMedia();
 		}, [syncWebcamMedia]);
+
+		// biome-ignore lint/correctness/useExhaustiveDependencies: The bubble appears and disappears as the playhead crosses the footage.
+		useEffect(() => {
+			if (webcamOnOutputTimeline) {
+				applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
+			}
+		}, [applyWebcamBubbleLayout, timelineTime, webcamOnOutputTimeline]);
+
+		// biome-ignore lint/correctness/useExhaustiveDependencies: The element is recreated when the webcam path or visibility changes.
+		useEffect(() => {
+			const webcamVideo = webcamVideoRef.current;
+			if (!webcamVideo) return;
+
+			const nextVolume = Math.max(0, Math.min(1, webcamVolume));
+			webcamVideo.volume = nextVolume;
+			webcamVideo.muted = nextVolume <= 0.001;
+		}, [webcamEnabled, webcamVideoPath, webcamVolume]);
 
 		// biome-ignore lint/correctness/useExhaustiveDependencies: The media path intentionally triggers source-specific state reset.
 		useEffect(() => {

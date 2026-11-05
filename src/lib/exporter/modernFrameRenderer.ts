@@ -53,7 +53,12 @@ import {
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
 import { getSceneEffectMetrics } from "@/components/video-editor/videoPlayback/sceneEffects";
 import { resolveSceneZoomTarget } from "@/components/video-editor/videoPlayback/sceneMotion";
-import { getWebcamMediaTargetTimeSeconds, isWebcamVisibleAtSourceTime } from "@/components/video-editor/videoPlayback/webcamSync";
+import {
+	getWebcamMediaTargetTimeSeconds,
+	isWebcamFootageActive,
+	isWebcamOnOutputTimeline,
+	isWebcamVisibleAtSourceTime,
+} from "@/components/video-editor/videoPlayback/webcamSync";
 import {
 	applyZoomTransform,
 	computeZoomTransform,
@@ -428,6 +433,7 @@ export class FrameRenderer {
 	private lastContentTimeMs: number | null = null;
 	private layoutCache: LayoutCache | null = null;
 	private currentVideoTime = 0;
+	private currentOutputTime = 0;
 	private cursorOverlay: PixiCursorOverlay | null = null;
 	private lastSyncedWebcamTime: number | null = null;
 	private webcamRenderMode: "hidden" | "live" | "cached" = "hidden";
@@ -2548,12 +2554,33 @@ export class FrameRenderer {
 		});
 	}
 
+	// ForwardFrameSource cannot rewind, so clips that step back in source time need a fresh decoder.
+	private async restartWebcamForwardFrameSourceIfRewound(targetTime: number): Promise<void> {
+		const webcamUrl = this.config.webcamUrl;
+		if (
+			!webcamUrl ||
+			this.lastSyncedWebcamTime === null ||
+			targetTime + 0.001 >= this.lastSyncedWebcamTime
+		) {
+			return;
+		}
+
+		const nextSource = new ForwardFrameSource();
+		await nextSource.initialize(webcamUrl);
+		const previousSource = this.webcamForwardFrameSource;
+		this.webcamForwardFrameSource = nextSource;
+		previousSource?.cancel();
+		void previousSource?.destroy();
+		this.lastSyncedWebcamTime = null;
+	}
+
 	private async syncWebcamFrame(targetTime: number): Promise<void> {
 		const webcamTargetTime = this.getExpectedWebcamTargetTimeSeconds(targetTime);
 
 		if (this.webcamForwardFrameSource) {
 			const clampedTime = clampMediaTimeToDuration(webcamTargetTime, null);
 			try {
+				await this.restartWebcamForwardFrameSourceIfRewound(clampedTime);
 				const decodedFrame =
 					await this.webcamForwardFrameSource.getFrameAtTime(clampedTime);
 				this.closeWebcamDecodedFrame();
@@ -2721,9 +2748,30 @@ export class FrameRenderer {
 		}
 	}
 
-	private updateWebcamOverlay(referenceTimeSeconds = this.currentVideoTime): void {
+	private getWebcamClockTime(): number {
+		return isWebcamOnOutputTimeline(this.config.webcam)
+			? this.currentOutputTime
+			: this.currentVideoTime;
+	}
+
+	// Added footage has its own length, so it leaves the frame instead of freezing on its last frame.
+	private isWebcamFootageOver(clockTime: number): boolean {
+		if (!isWebcamOnOutputTimeline(this.config.webcam)) {
+			return false;
+		}
+		const elementDuration = this.webcamVideoElement?.duration;
+		return !isWebcamFootageActive({
+			currentTime: clockTime,
+			webcamDuration:
+				this.webcamForwardFrameSource?.getDurationSec() ??
+				(Number.isFinite(elementDuration) ? elementDuration : null),
+			timeOffsetMs: this.config.webcam?.timeOffsetMs,
+		});
+	}
+
+	private updateWebcamOverlay(referenceTimeSeconds = this.getWebcamClockTime()): void {
 		const webcam = this.config.webcam;
-		if (!webcam?.enabled || !isWebcamVisibleAtSourceTime(webcam, referenceTimeSeconds) || !this.webcamRootContainer || !this.webcamMaskGraphics) {
+		if (!webcam?.enabled || !isWebcamVisibleAtSourceTime(webcam, referenceTimeSeconds) || this.isWebcamFootageOver(referenceTimeSeconds) || !this.webcamRootContainer || !this.webcamMaskGraphics) {
 			if (this.webcamRootContainer) {
 				this.webcamRootContainer.visible = false;
 			}
@@ -2854,6 +2902,7 @@ export class FrameRenderer {
 		}
 
 		this.currentVideoTime = timestamp / 1_000_000;
+		this.currentOutputTime = backgroundTimelineTimestamp / 1_000_000;
 		this.cameraContainer.visible = videoFrame !== null;
 		if (!videoFrame) {
 			this.updateAnimationState(backgroundTimelineTimestamp / 1000, cursorTimestamp / 1000);
@@ -2903,7 +2952,7 @@ export class FrameRenderer {
 		}
 
 		if (this.webcamForwardFrameSource || this.webcamVideoElement) {
-			await this.syncWebcamFrame(Math.max(0, this.currentVideoTime));
+			await this.syncWebcamFrame(Math.max(0, this.getWebcamClockTime()));
 		}
 
 		if (this.backgroundForwardFrameSource || this.backgroundVideoElement) {

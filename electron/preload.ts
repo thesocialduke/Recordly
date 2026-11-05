@@ -212,6 +212,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlaySetWebcamPreviewVisible: (visible: boolean) => {
 		ipcRenderer.send("hud-overlay-set-webcam-preview-visible", visible);
 	},
+	hudOverlaySetTeleprompterActive: (active: boolean) => {
+		ipcRenderer.send("hud-overlay-set-teleprompter-active", active);
+	},
+	hudOverlaySetKeyboardFocus: (focus: boolean) => {
+		ipcRenderer.send("hud-overlay-set-keyboard-focus", focus);
+	},
 	getHudOverlayCaptureProtection: () => {
 		return ipcRenderer.invoke("get-hud-overlay-capture-protection");
 	},

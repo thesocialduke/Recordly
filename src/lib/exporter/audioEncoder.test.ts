@@ -256,6 +256,7 @@ describe("AudioProcessor offline render preparation", () => {
 					mainBufferEntry: null,
 					companionEntries: [],
 					regionEntries: [],
+			outputEntries: [],
 					mutedSourceOutputRangesSec: [],
 					slices: [],
 					outputDurationMs: 100,

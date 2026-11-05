@@ -82,6 +82,8 @@ import {
 	DEFAULT_WEBCAM_POSITION_PRESET,
 	DEFAULT_WEBCAM_POSITION_X,
 	DEFAULT_WEBCAM_POSITION_Y,
+	DEFAULT_WEBCAM_AUDIO_ENABLED,
+	DEFAULT_WEBCAM_AUDIO_VOLUME,
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_ROUNDNESS,
 	DEFAULT_WEBCAM_SHADOW,
@@ -105,6 +107,7 @@ import {
 } from "./webcamOverlay";
 
 const tahoeCursorUrl = cursorSetAssets.tahoe.arrow.url;
+const WEBCAM_START_OFFSET_RANGE_SECONDS = 60;
 const BUILTIN_CURSOR_PREVIEW_SIZE = 28;
 const BUILTIN_CURSOR_PREVIEW_FRAME_SIZE = 48;
 
@@ -516,6 +519,7 @@ interface SettingsPanelProps {
 	borderRadius?: number;
 	onBorderRadiusChange?: (radius: number) => void;
 	webcam?: WebcamOverlaySettings;
+	webcamHasAudio?: boolean;
 	webcamPreviewSrc?: string | null;
 	webcamPreviewCurrentTime?: number;
 	webcamPreviewPlaying?: boolean;
@@ -965,6 +969,7 @@ export function SettingsPanel({
 	webcamPreviewSrc = null,
 	webcamPreviewCurrentTime = 0,
 	webcamPreviewPlaying = false,
+	webcamHasAudio = false,
 	onWebcamChange,
 	onUploadWebcam,
 	onClearWebcam,
@@ -3241,6 +3246,48 @@ export function SettingsPanel({
 									onChange={(v) => updateWebcam({ shadow: v })}
 									formatValue={(v) => `${Math.round(v * 100)}%`}
 								/>
+							)}
+							{webcam?.sourcePath && (
+								<SliderControl
+									label={tSettings("effects.webcamStartOffset")}
+									value={(webcam.timeOffsetMs ?? 0) / 1000}
+									min={-WEBCAM_START_OFFSET_RANGE_SECONDS}
+									max={WEBCAM_START_OFFSET_RANGE_SECONDS}
+									step={0.1}
+									onChange={(v) =>
+										updateWebcam({ timeOffsetMs: Math.round(v * 1000) })
+									}
+									formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`}
+								/>
+							)}
+							{webcamHasAudio && (
+								<>
+									<div className="flex items-center justify-between py-2">
+										<span className="text-xs text-muted-foreground">
+											{tSettings("effects.webcamFootageAudio")}
+										</span>
+										<Switch
+											aria-label={tSettings("effects.webcamFootageAudio")}
+											checked={
+												webcam?.audioEnabled ?? DEFAULT_WEBCAM_AUDIO_ENABLED
+											}
+											onCheckedChange={(audioEnabled) =>
+												updateWebcam({ audioEnabled })
+											}
+										/>
+									</div>
+									{(webcam?.audioEnabled ?? DEFAULT_WEBCAM_AUDIO_ENABLED) && (
+										<SliderControl
+											label={tSettings("effects.webcamFootageVolume")}
+											value={webcam?.audioVolume ?? DEFAULT_WEBCAM_AUDIO_VOLUME}
+											min={0}
+											max={1}
+											step={0.01}
+											onChange={(v) => updateWebcam({ audioVolume: v })}
+											formatValue={(v) => `${Math.round(v * 100)}%`}
+										/>
+									)}
+								</>
 							)}
 							<div className="py-2">
 								<div className="flex flex-col gap-4">

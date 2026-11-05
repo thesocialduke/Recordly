@@ -1,12 +1,13 @@
 import React, { useMemo } from "react";
 import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import { resolveSourceTrackRoutingPolicy } from "@/lib/exporter/sourceTrackRoutingPolicy";
-import type { AudioRegion, ClipRegion } from "../types";
+import type { AudioRegion, ClipRegion, WebcamOverlaySettings } from "../types";
 import { findClipAtTimelineTime } from "../types";
 import { isClipMutedById } from "./clipAudio";
 import { useAudioPreviewSync } from "./useAudioPreviewSync";
 import { useClipAudioSettingsController } from "./useClipAudioSettingsController";
 import { useSourceAudioFallback } from "./useSourceAudioFallback";
+import { resolveWebcamAudioTrack, useWebcamHasAudio } from "./useWebcamAudio";
 
 function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
 	if (!input) return null;
@@ -44,6 +45,7 @@ interface UseVideoEditorAudioParams {
 	sourceAudioFallbackRefreshKey?: number;
 	summarizeErrorMessage: (message: string) => string;
 	onSourceFallbackLoadError: (error: unknown) => void;
+	webcam: WebcamOverlaySettings;
 }
 
 export function useVideoEditorAudio({
@@ -63,6 +65,7 @@ export function useVideoEditorAudio({
 	sourceAudioFallbackRefreshKey = 0,
 	summarizeErrorMessage,
 	onSourceFallbackLoadError,
+	webcam,
 }: UseVideoEditorAudioParams) {
 	const fallbackLookupSourcePath = useMemo(
 		() => extractLocalPathFromMediaServerUrl(currentSourcePath) ?? currentSourcePath,
@@ -129,7 +132,20 @@ export function useVideoEditorAudio({
 		onSourceFallbackLoadError,
 	});
 
+	const webcamHasAudio = useWebcamHasAudio(webcam.enabled ? webcam.sourcePath : null);
+	const webcamAudioTrack = useMemo(
+		() => resolveWebcamAudioTrack(webcam, webcamHasAudio),
+		[webcam, webcamHasAudio],
+	);
+	const webcamPreviewVolume =
+		webcamAudioTrack && (webcamAudioTrack.timeline === "output" || !isCurrentClipMuted)
+			? webcamAudioTrack.gain * previewVolume
+			: 0;
+
 	return {
+		webcamHasAudio,
+		webcamAudioTrack,
+		webcamPreviewVolume,
 		sourceAudioFallbackPaths,
 		sourceAudioFallbackStartDelayMsByPath,
 		previewSourceAudioFallbackPaths,

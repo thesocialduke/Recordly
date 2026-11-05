@@ -127,6 +127,31 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		}
 		if (this.cancelled) throw new Error("Export cancelled");
 
+		// The offset can be negative, which starts playback partway into the footage.
+		let hasWebcamAudio = false;
+		const outputEntries: PreparedOfflineRender["outputEntries"] = [];
+		if (this.webcamAudioTrack) {
+			const { path, offsetMs, gain, timeline } = this.webcamAudioTrack;
+			const buffer = await this.decodeAudioFromUrl(path);
+			if (buffer && timeline === "output") {
+				hasWebcamAudio = true;
+				outputEntries.push({
+					buffer,
+					region: {
+						id: "webcam-footage",
+						audioPath: path,
+						startMs: offsetMs,
+						endMs: offsetMs + buffer.duration * 1000,
+						volume: gain,
+					},
+				});
+			} else if (buffer) {
+				hasWebcamAudio = true;
+				companionEntries.push({ buffer, gain, startDelaySec: offsetMs / 1000 });
+			}
+		}
+		if (this.cancelled) throw new Error("Export cancelled");
+
 		// Decode audio region overlay files
 		const regionEntries: Array<{ buffer: AudioBuffer; region: AudioRegion }> = [];
 		for (const region of audioRegions) {
@@ -138,7 +163,11 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		this.onProgress?.(0.2);
 
 		// Determine source duration for timeline calculation
-		const primaryBuffer = mainBufferEntry?.buffer ?? companionEntries[0]?.buffer ?? null;
+		const primaryBuffer =
+			mainBufferEntry?.buffer ??
+			companionEntries[0]?.buffer ??
+			outputEntries[0]?.buffer ??
+			null;
 		if (!primaryBuffer && regionEntries.length === 0) {
 			throw new Error("No decodable audio sources found");
 		}
@@ -146,7 +175,11 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		let sourceDurationSec: number;
 		if (mainBufferEntry?.buffer) {
 			sourceDurationSec = mainBufferEntry.buffer.duration;
-		} else if (resolvedPlan.playbackPaths.length > 0 || regionEntries.length > 0) {
+		} else if (
+			resolvedPlan.playbackPaths.length > 0 ||
+			regionEntries.length > 0 ||
+			hasWebcamAudio
+		) {
 			sourceDurationSec = await this.getMediaDurationSec(videoUrl);
 		} else {
 			sourceDurationSec = primaryBuffer?.duration ?? 0;
@@ -196,6 +229,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 			mainBufferEntry,
 			companionEntries,
 			regionEntries,
+			outputEntries,
 			mutedSourceOutputRangesSec,
 			slices,
 			outputDurationMs,
@@ -346,6 +380,18 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 					outputOffsetSec,
 					chunkSec,
 					prepared.mutedSourceOutputRangesSec,
+				);
+			}
+
+			for (const { buffer, region } of prepared.outputEntries) {
+				this.scheduleRegionForChunk(
+					offlineCtx,
+					buffer,
+					region,
+					slices,
+					outputOffsetSec,
+					chunkSec,
+					true,
 				);
 			}
 

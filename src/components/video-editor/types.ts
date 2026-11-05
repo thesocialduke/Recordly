@@ -139,6 +139,9 @@ export interface WebcamOverlaySettings {
 	enabled: boolean;
 	sourcePath: string | null;
 	timeOffsetMs: number;
+	/** Mixes the footage's own sound into preview and export when it has any. */
+	audioEnabled?: boolean;
+	audioVolume?: number;
 	mirror: boolean;
 	cropRegion: CropRegion;
 	corner: WebcamCorner;
@@ -200,6 +203,8 @@ export const DEFAULT_WEBCAM_POSITION_PRESET: WebcamPositionPreset = "bottom-righ
 export const DEFAULT_WEBCAM_POSITION_X = 1;
 export const DEFAULT_WEBCAM_POSITION_Y = 1;
 export const DEFAULT_WEBCAM_TIME_OFFSET_MS = 0;
+export const DEFAULT_WEBCAM_AUDIO_ENABLED = true;
+export const DEFAULT_WEBCAM_AUDIO_VOLUME = 1;
 
 export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
 	enabled: false,

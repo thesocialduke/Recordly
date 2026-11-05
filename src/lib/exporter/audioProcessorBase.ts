@@ -1,10 +1,16 @@
 import { WebDemuxer } from "web-demuxer";
 import { resolveMediaElementSource } from "./localMediaSource";
-import type { TrimLikeRegion } from "./audioProcessorShared";
+import type { TrimLikeRegion, WebcamAudioTrack } from "./audioProcessorShared";
 
 export class AudioProcessorBase {
 	protected cancelled = false;
 	protected onProgress?: (progress: number) => void;
+	protected webcamAudioTrack: WebcamAudioTrack | null = null;
+
+	setWebcamAudioTrack(track: WebcamAudioTrack | null | undefined) {
+		this.webcamAudioTrack = track ?? null;
+	}
+
 	protected createWavHeader(
 		sampleRate: number,
 		numChannels: number,
