@@ -138,6 +138,7 @@
 		"webcamHeight": "Altezza webcam",
 		"webcamStartOffset": "Scostamento iniziale del filmato",
 		"webcamCircle": "Webcam circolare",
+		"recordWebcam": "Registra webcam",
 		"webcamSeparateAudio": "Separa l'audio nella timeline",
 		"webcamAudioSeparated": "L'audio del filmato è ora una clip separata nella timeline",
 		"webcamFootageAudio": "Includi audio del filmato",

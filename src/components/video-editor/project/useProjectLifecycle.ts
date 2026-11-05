@@ -350,20 +350,27 @@ export function useProjectLifecycle(input: Input) {
 		refs.autoSuggestedVideoPathRef.current = null;
 		current.resetHistory();
 	}, []);
+	const attachWebcamFootage = useCallback(
+		async (path: string, timeOffsetMs: number) => {
+			appearance.setWebcam((previous) => ({
+				...previous,
+				enabled: true,
+				sourcePath: path,
+				visibleRanges: undefined,
+				clips: undefined,
+				audioEnabled: undefined,
+				timeOffsetMs,
+			}));
+			await syncRecordingSessionWebcam(path, timeOffsetMs);
+			toast.success(input.t("settings.effects.webcamFootageAdded"));
+		},
+		[appearance.setWebcam, syncRecordingSessionWebcam, input.t],
+	);
 	const handleUploadWebcam = useCallback(async () => {
 		const result = await window.electronAPI.openVideoFilePicker();
 		if (!result.success || !result.path) return;
-		appearance.setWebcam((previous) => ({
-			...previous,
-			enabled: true,
-			sourcePath: result.path ?? null,
-			visibleRanges: undefined,
-			clips: undefined,
-			timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
-		}));
-		await syncRecordingSessionWebcam(result.path, DEFAULT_WEBCAM_TIME_OFFSET_MS);
-		toast.success(input.t("settings.effects.webcamFootageAdded"));
-	}, [appearance.setWebcam, syncRecordingSessionWebcam, input.t]);
+		await attachWebcamFootage(result.path, DEFAULT_WEBCAM_TIME_OFFSET_MS);
+	}, [attachWebcamFootage]);
 	const handleClearWebcam = useCallback(async () => {
 		appearance.setWebcam((previous) => ({
 			...previous,
@@ -386,6 +393,7 @@ export function useProjectLifecycle(input: Input) {
 		openUnsavedChangesDialog,
 		syncActiveVideoSource,
 		resetSourceScopedEditorState,
+		attachWebcamFootage,
 		handleUploadWebcam,
 		handleClearWebcam,
 	};

@@ -138,6 +138,7 @@
 		"webcamHeight": "Высота веб-камеры",
 		"webcamStartOffset": "Смещение начала видео",
 		"webcamCircle": "Круглая веб-камера",
+		"recordWebcam": "Записать с веб-камеры",
 		"webcamSeparateAudio": "Отделить звук на таймлайн",
 		"webcamAudioSeparated": "Звук видео теперь отдельный клип на таймлайне",
 		"webcamFootageAudio": "Включить звук видео",

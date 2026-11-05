@@ -20,6 +20,7 @@ import { useEditorUiState } from "./state/useEditorUiState";
 import { useProjectState } from "./state/useProjectState";
 import { useTimelineState } from "./state/useTimelineState";
 import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
+import { WebcamRecorderPanel } from "./WebcamRecorderPanel";
 
 export default function VideoEditor() {
 	const { t } = useI18n();
@@ -93,6 +94,7 @@ export default function VideoEditor() {
 	} = ui;
 	const effectiveShowCursor = sessionShowCursorOverride ?? showCursor;
 	const [trafficLightsVisible, setTrafficLightsVisible] = useState(false);
+	const [webcamRecorderOpen, setWebcamRecorderOpen] = useState(false);
 	useEffect(() => {
 		let active = true;
 		let receivedEvent = false;
@@ -264,7 +266,7 @@ export default function VideoEditor() {
 	const {
 		snapshot: { currentSourcePath },
 		history: { handleUndo, handleRedo },
-		lifecycle: { handleUploadWebcam, handleClearWebcam },
+		lifecycle: { attachWebcamFootage, handleUploadWebcam, handleClearWebcam },
 		autoCaption: autoCaptionController,
 	} = projectController;
 
@@ -379,30 +381,46 @@ export default function VideoEditor() {
 		webcamHasAudio: audio.webcamHasAudio,
 		onSeparateWebcamAudio: audio.separateWebcamAudio,
 		handleUploadWebcam,
+		handleRecordWebcam: () => setWebcamRecorderOpen(true),
 		handleClearWebcam,
 	});
 	return (
-		<EditorShell
-			t={t}
-			project={project}
-			appearance={appearance}
-			timeline={timeline}
-			ui={ui}
-			presets={presets}
-			projectController={projectController}
-			editing={editing}
-			exportController={exportController}
-			exportSettings={exportSettings}
-			exportSession={exportSession}
-			exportDimensions={exportDimensions}
-			settingsPanelProps={settingsPanelProps}
-			headerLeftControlsPaddingClass={headerLeftControlsPaddingClass}
-			hasCaptionsForSidecar={hasCaptionsForSidecar}
-			nvidiaCudaExportAvailable={nvidiaCudaExportAvailable}
-			experimentalNvidiaCudaExport={experimentalNvidiaCudaExport}
-			setExperimentalNvidiaCudaExport={setExperimentalNvidiaCudaExport}
-			effectiveShowCursor={effectiveShowCursor}
-			previewAspectRatioValue={previewAspectRatioValue}
-		/>
+		<>
+			<EditorShell
+				t={t}
+				project={project}
+				appearance={appearance}
+				timeline={timeline}
+				ui={ui}
+				presets={presets}
+				projectController={projectController}
+				editing={editing}
+				exportController={exportController}
+				exportSettings={exportSettings}
+				exportSession={exportSession}
+				exportDimensions={exportDimensions}
+				settingsPanelProps={settingsPanelProps}
+				headerLeftControlsPaddingClass={headerLeftControlsPaddingClass}
+				hasCaptionsForSidecar={hasCaptionsForSidecar}
+				nvidiaCudaExportAvailable={nvidiaCudaExportAvailable}
+				experimentalNvidiaCudaExport={experimentalNvidiaCudaExport}
+				setExperimentalNvidiaCudaExport={setExperimentalNvidiaCudaExport}
+				effectiveShowCursor={effectiveShowCursor}
+				previewAspectRatioValue={previewAspectRatioValue}
+			/>
+			{webcamRecorderOpen && (
+				<WebcamRecorderPanel
+					replacesFootage={Boolean(appearance.webcam.sourcePath)}
+					getPlayheadMs={() => projection.timelinePlayheadTime * 1000}
+					onPlaybackStart={() => editing.playback.startPlayback()}
+					onPlaybackStop={() => videoPlaybackRef.current?.pause()}
+					onRecorded={(path, startMs) => {
+						setWebcamRecorderOpen(false);
+						void attachWebcamFootage(path, startMs);
+					}}
+					onClose={() => setWebcamRecorderOpen(false)}
+				/>
+			)}
+		</>
 	);
 }

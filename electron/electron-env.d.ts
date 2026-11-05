@@ -328,6 +328,11 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		requestMicrophoneAccess: () => Promise<{
+			success: boolean;
+			granted: boolean;
+			error?: string;
+		}>;
 		storeRecordedVideo: (
 			videoData: ArrayBuffer,
 			fileName: string,

@@ -196,3 +196,55 @@ describe("shouldGrantDisplayCapture", () => {
 		);
 	});
 });
+
+describe("editor webcam recording", () => {
+	const base = ["http://localhost:5173/"];
+	const editor = "http://localhost:5173/?windowType=editor";
+	const request = (overrides = {}) => ({
+		permission: "media",
+		isTrustedCaptureWindow: false,
+		isMainFrame: true,
+		currentDocumentUrl: editor,
+		requestingUrl: editor,
+		securityOrigins: ["http://localhost:5173/"],
+		...overrides,
+	});
+
+	it("lets the editor window use the camera and microphone", () => {
+		expect(shouldGrantMediaPermission(request(), base)).toBe(true);
+	});
+
+	it("keeps other permissions, frames, and pages blocked", () => {
+		expect(shouldGrantMediaPermission(request({ permission: "geolocation" }), base)).toBe(false);
+		expect(shouldGrantMediaPermission(request({ isMainFrame: false }), base)).toBe(false);
+		const remote = "https://example.com/?windowType=editor";
+		expect(
+			shouldGrantMediaPermission(
+				request({ currentDocumentUrl: remote, requestingUrl: remote }),
+				base,
+			),
+		).toBe(false);
+		const other = "http://localhost:5173/?windowType=source-selector";
+		expect(
+			shouldGrantMediaPermission(
+				request({ currentDocumentUrl: other, requestingUrl: other }),
+				base,
+			),
+		).toBe(false);
+	});
+
+	it("never gives the editor screen capture", () => {
+		expect(
+			shouldGrantDisplayCapture(
+				{
+					isTrustedCaptureWindow: false,
+					isMainFrame: true,
+					currentDocumentUrl: editor,
+					securityOrigin: "http://localhost:5173/",
+					videoRequested: true,
+				},
+				base,
+			),
+		).toBe(false);
+	});
+});

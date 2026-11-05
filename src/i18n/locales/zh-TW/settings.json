@@ -138,6 +138,7 @@
 		"webcamHeight": "網路攝影機高度",
 		"webcamStartOffset": "素材起始偏移",
 		"webcamCircle": "圓形攝影機",
+		"recordWebcam": "錄製攝影機",
 		"webcamSeparateAudio": "將音訊分離到時間軸",
 		"webcamAudioSeparated": "素材音訊現在是時間軸上的獨立片段",
 		"webcamFootageAudio": "包含素材音訊",

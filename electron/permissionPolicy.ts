@@ -1,4 +1,5 @@
 const CAPTURE_WINDOW_TYPE = "hud-overlay";
+const EDITOR_WINDOW_TYPE = "editor";
 const TRUSTED_RENDERER_PROTOCOLS = new Set(["http:", "https:", "file:"]);
 const FILE_SECURITY_ORIGINS = new Set(["null", "file://", "file:///"]);
 
@@ -80,6 +81,32 @@ export function isTrustedCaptureDocumentUrl(
 	});
 }
 
+/** The editor records webcam footage, so it gets camera and mic but never screen capture. */
+function isTrustedEditorDocumentUrl(
+	candidateUrl: string,
+	trustedDocumentBaseUrls: readonly string[],
+): boolean {
+	const candidate = parseUrl(candidateUrl);
+	if (
+		!candidate ||
+		!TRUSTED_RENDERER_PROTOCOLS.has(candidate.protocol) ||
+		candidate.username !== "" ||
+		candidate.password !== "" ||
+		candidate.searchParams.get("windowType") !== EDITOR_WINDOW_TYPE
+	) {
+		return false;
+	}
+
+	return trustedDocumentBaseUrls.some((trustedBaseUrl) => {
+		const trustedBase = parseUrl(trustedBaseUrl);
+		return Boolean(
+			trustedBase &&
+				isValidTrustedBaseUrl(trustedBase) &&
+				hasSameBaseLocation(candidate, trustedBase),
+		);
+	});
+}
+
 function isSameDocument(firstUrl: string, secondUrl: string): boolean {
 	const first = parseUrl(firstUrl);
 	const second = parseUrl(secondUrl);
@@ -119,17 +146,21 @@ export function shouldGrantMediaPermission(
 	request: MediaPermissionPolicyRequest,
 	trustedDocumentBaseUrls: readonly string[],
 ): boolean {
+	const isTrustedDocument = (url: string) =>
+		request.isTrustedCaptureWindow
+			? isTrustedCaptureDocumentUrl(url, trustedDocumentBaseUrls)
+			: isTrustedEditorDocumentUrl(url, trustedDocumentBaseUrls);
+
 	if (
 		request.permission !== "media" ||
-		!request.isTrustedCaptureWindow ||
 		!request.isMainFrame ||
-		!isTrustedCaptureDocumentUrl(request.currentDocumentUrl, trustedDocumentBaseUrls)
+		!isTrustedDocument(request.currentDocumentUrl)
 	) {
 		return false;
 	}
 
 	if (
-		!isTrustedCaptureDocumentUrl(request.requestingUrl, trustedDocumentBaseUrls) ||
+		!isTrustedDocument(request.requestingUrl) ||
 		!isSameDocument(request.currentDocumentUrl, request.requestingUrl)
 	) {
 		return false;
