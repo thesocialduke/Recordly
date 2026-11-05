@@ -144,6 +144,7 @@
 		"webcamHeight": "Webcam Height",
 		"webcamStartOffset": "Footage start offset",
 		"webcamCircle": "Circular webcam",
+		"recordWebcam": "Record webcam",
 		"webcamSeparateAudio": "Separate audio to timeline",
 		"webcamAudioSeparated": "Footage audio is now its own clip on the timeline",
 		"webcamFootageAudio": "Include footage audio",

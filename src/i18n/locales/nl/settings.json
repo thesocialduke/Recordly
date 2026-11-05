@@ -138,6 +138,7 @@
 		"webcamHeight": "Webcamhoogte",
 		"webcamStartOffset": "Startverschuiving van beeldmateriaal",
 		"webcamCircle": "Ronde webcam",
+		"recordWebcam": "Webcam opnemen",
 		"webcamSeparateAudio": "Audio scheiden naar tijdlijn",
 		"webcamAudioSeparated": "De audio van het beeldmateriaal is nu een eigen clip op de tijdlijn",
 		"webcamFootageAudio": "Audio van beeldmateriaal opnemen",

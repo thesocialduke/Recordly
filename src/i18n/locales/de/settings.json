@@ -138,6 +138,7 @@
 		"webcamHeight": "Webcam-Höhe",
 		"webcamStartOffset": "Startversatz des Materials",
 		"webcamCircle": "Runde Webcam",
+		"recordWebcam": "Webcam aufnehmen",
 		"webcamSeparateAudio": "Audio auf die Zeitleiste trennen",
 		"webcamAudioSeparated": "Der Ton des Materials ist jetzt ein eigener Clip auf der Zeitleiste",
 		"webcamFootageAudio": "Ton des Materials einbeziehen",

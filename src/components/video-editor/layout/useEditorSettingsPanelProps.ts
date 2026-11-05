@@ -38,6 +38,7 @@ type Input = {
 	webcamHasAudio: boolean;
 	onSeparateWebcamAudio: () => boolean;
 	handleUploadWebcam: () => void;
+	handleRecordWebcam: () => void;
 	handleClearWebcam: () => void;
 };
 
@@ -68,6 +69,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		webcamHasAudio,
 		onSeparateWebcamAudio,
 		handleUploadWebcam,
+		handleRecordWebcam,
 		handleClearWebcam,
 	} = input;
 	const selectedZoom = timeline.zoomRegions.find(
@@ -184,6 +186,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		webcamPreviewPlaying: isPlaying,
 		onWebcamChange: appearance.setWebcam,
 		onUploadWebcam: handleUploadWebcam,
+		onRecordWebcam: handleRecordWebcam,
 		onClearWebcam: handleClearWebcam,
 		padding: appearance.padding,
 		onPaddingChange: appearance.setPadding,

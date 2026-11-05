@@ -7,7 +7,6 @@ import { isClipMutedById } from "./clipAudio";
 import { useAudioPreviewSync } from "./useAudioPreviewSync";
 import { useClipAudioSettingsController } from "./useClipAudioSettingsController";
 import { useSourceAudioFallback } from "./useSourceAudioFallback";
-import { isWebcamOnOutputTimeline } from "../videoPlayback/webcamSync";
 import {
 	applyWebcamClipSpan,
 	getSeparatedWebcamAudioRegions,
@@ -150,26 +149,27 @@ export function useVideoEditorAudio({
 		webcam.enabled ? webcam.sourcePath : null,
 	);
 	const timelineAudioRegions = useMemo(() => {
-		if (!webcam.enabled || !webcam.sourcePath || !isWebcamOnOutputTimeline(webcam)) {
+		if (!webcam.enabled || !webcam.sourcePath) {
 			return audioRegions;
 		}
 		return [
 			...audioRegions,
 			...getWebcamClipTimelineRegions(
-				resolveWebcamClips(webcam, webcamDurationMs),
+				resolveWebcamClips(webcam, webcamDurationMs, clipRegions),
 				webcam.sourcePath,
 				webcam.audioVolume ?? 1,
 			),
 		];
-	}, [audioRegions, webcam, webcamDurationMs]);
+	}, [audioRegions, clipRegions, webcam, webcamDurationMs]);
 	const updateWebcamClips = useCallback(
 		(update: (clips: WebcamClip[]) => WebcamClip[]) => {
 			setWebcam((previous) => ({
 				...previous,
-				clips: update(resolveWebcamClips(previous, webcamDurationMs)),
+				clips: update(resolveWebcamClips(previous, webcamDurationMs, clipRegions)),
+				visibleRanges: undefined,
 			}));
 		},
-		[setWebcam, webcamDurationMs],
+		[clipRegions, setWebcam, webcamDurationMs],
 	);
 	const changeWebcamClipSpan = useCallback(
 		(id: string, span: { start: number; end: number }) => {
@@ -190,7 +190,7 @@ export function useVideoEditorAudio({
 		[updateWebcamClips],
 	);
 	const separateWebcamAudio = useCallback(() => {
-		const clips = resolveWebcamClips(webcam, webcamDurationMs);
+		const clips = resolveWebcamClips(webcam, webcamDurationMs, clipRegions);
 		if (!webcam.sourcePath || clips.length === 0) {
 			return false;
 		}
@@ -209,7 +209,15 @@ export function useVideoEditorAudio({
 		setAudioRegions((current) => [...current, ...regions]);
 		setWebcam((previous) => ({ ...previous, audioEnabled: false }));
 		return true;
-	}, [audioRegions, nextAudioIdRef, setAudioRegions, setWebcam, webcam, webcamDurationMs]);
+	}, [
+		audioRegions,
+		clipRegions,
+		nextAudioIdRef,
+		setAudioRegions,
+		setWebcam,
+		webcam,
+		webcamDurationMs,
+	]);
 	const webcamAudioTrack = useMemo(
 		() => resolveWebcamAudioTrack(webcam, webcamHasAudio),
 		[webcam, webcamHasAudio],

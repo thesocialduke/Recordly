@@ -526,6 +526,7 @@ interface SettingsPanelProps {
 	webcamPreviewPlaying?: boolean;
 	onWebcamChange?: (webcam: WebcamOverlaySettings) => void;
 	onUploadWebcam?: () => void;
+	onRecordWebcam?: () => void;
 	onClearWebcam?: () => void;
 	padding?: Padding;
 	onPaddingChange?: (padding: Padding) => void;
@@ -974,6 +975,7 @@ export function SettingsPanel({
 	onSeparateWebcamAudio,
 	onWebcamChange,
 	onUploadWebcam,
+	onRecordWebcam,
 	onClearWebcam,
 	padding = DEFAULT_PADDING,
 	onPaddingChange,
@@ -3335,6 +3337,16 @@ export function SettingsPanel({
 										</div>
 									</div>
 									<div className="grid grid-cols-1 gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											onClick={onRecordWebcam}
+											className="h-9 w-full min-w-0 justify-start gap-2 px-3"
+										>
+											<span className="min-w-0 truncate">
+												{tSettings("effects.recordWebcam")}
+											</span>
+										</Button>
 										<Button
 											type="button"
 											variant="outline"

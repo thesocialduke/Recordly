@@ -57,6 +57,25 @@ export function registerPermissionHandlers() {
 		}
 	});
 
+	ipcMain.handle("request-microphone-access", async () => {
+		if (process.platform !== "darwin") {
+			return { success: true, granted: true };
+		}
+
+		try {
+			// Chromium waits indefinitely for a microphone that macOS has not been asked about.
+			const status = systemPreferences.getMediaAccessStatus("microphone");
+			const granted =
+				status === "granted" ||
+				(status === "not-determined" &&
+					(await systemPreferences.askForMediaAccess("microphone")));
+			return { success: true, granted };
+		} catch (error) {
+			console.error("Failed to request microphone access:", error);
+			return { success: false, granted: false, error: String(error) };
+		}
+	});
+
 	ipcMain.handle("open-screen-recording-preferences", async () => {
 		if (process.platform !== "darwin") {
 			return { success: true };

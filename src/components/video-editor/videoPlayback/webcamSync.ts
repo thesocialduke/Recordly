@@ -121,13 +121,22 @@ export function getWebcamCorrectiveSeekTime({
 }
 
 /**
- * Recorded webcams share the screen recording's clock, so they follow its trims.
- * Footage added by hand is independent of that clock and runs on the edit's timeline.
+ * Recorded webcams share the screen recording's clock, so they follow its trims until
+ * they are edited. Added or edited footage runs on the edit's timeline instead.
  */
 export function isWebcamOnOutputTimeline(
-	webcam: { sourcePath?: string | null; visibleRanges?: unknown } | null | undefined,
+	webcam:
+		| { sourcePath?: string | null; visibleRanges?: unknown; clips?: unknown }
+		| null
+		| undefined,
 ): boolean {
-	if (!webcam?.sourcePath || webcam.visibleRanges) {
+	if (!webcam?.sourcePath) {
+		return false;
+	}
+	if (webcam.clips) {
+		return true;
+	}
+	if (webcam.visibleRanges) {
 		return false;
 	}
 	const fileName = webcam.sourcePath.split(/[\\/]/).pop() ?? "";

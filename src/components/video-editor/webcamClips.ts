@@ -1,4 +1,12 @@
-import type { AudioRegion, WebcamClip, WebcamOverlaySettings } from "./types";
+import {
+	type AudioRegion,
+	type ClipRegion,
+	getClipSourceEndMs,
+	getClipSourceStartMs,
+	type WebcamClip,
+	type WebcamOverlaySettings,
+} from "./types";
+import { isWebcamOnOutputTimeline } from "./videoPlayback/webcamSync";
 
 const WEBCAM_CLIP_ID_PREFIX = "webcam-clip-";
 const WEBCAM_CLIP_MIN_DURATION_MS = 100;
@@ -11,14 +19,19 @@ export function isWebcamClipId(id: string | null | undefined): boolean {
 
 /** Untouched footage has no stored clips, so it shows as one clip placed by its start offset. */
 export function resolveWebcamClips(
-	webcam: Pick<WebcamOverlaySettings, "clips" | "timeOffsetMs">,
+	webcam: Pick<WebcamOverlaySettings, "clips" | "timeOffsetMs"> &
+		Partial<Pick<WebcamOverlaySettings, "sourcePath" | "visibleRanges">>,
 	durationMs: number | null,
+	screenClips: ClipRegion[] = [],
 ): WebcamClip[] {
 	if (webcam.clips) {
 		return webcam.clips;
 	}
 	if (!durationMs || durationMs <= 0) {
 		return [];
+	}
+	if (webcam.sourcePath && !isWebcamOnOutputTimeline(webcam)) {
+		return getRecordingLinkedClips(webcam, durationMs, screenClips);
 	}
 
 	const offsetMs = webcam.timeOffsetMs ?? 0;
@@ -30,6 +43,35 @@ export function resolveWebcamClips(
 			sourceStartMs: Math.max(0, -offsetMs),
 		},
 	];
+}
+
+/** A recorded webcam mirrors the screen clips it was captured alongside until it is edited. */
+function getRecordingLinkedClips(
+	webcam: Pick<WebcamOverlaySettings, "timeOffsetMs"> &
+		Partial<Pick<WebcamOverlaySettings, "visibleRanges">>,
+	durationMs: number,
+	screenClips: ClipRegion[],
+): WebcamClip[] {
+	const offsetMs = webcam.timeOffsetMs ?? 0;
+	const footage = webcam.visibleRanges ?? [{ startMs: offsetMs, endMs: offsetMs + durationMs }];
+	const clips: WebcamClip[] = [];
+	for (const screenClip of screenClips) {
+		const sourceStartMs = getClipSourceStartMs(screenClip);
+		const sourceEndMs = getClipSourceEndMs(screenClip);
+		const speed = screenClip.speed > 0 ? screenClip.speed : 1;
+		for (const range of footage) {
+			const startMs = Math.max(sourceStartMs, range.startMs);
+			const endMs = Math.min(sourceEndMs, range.endMs);
+			if (endMs - startMs < WEBCAM_CLIP_MIN_DURATION_MS) continue;
+			clips.push({
+				id: `${WEBCAM_CLIP_ID_PREFIX}${clips.length + 1}`,
+				startMs: Math.round(screenClip.startMs + (startMs - sourceStartMs) / speed),
+				endMs: Math.round(screenClip.startMs + (endMs - sourceStartMs) / speed),
+				sourceStartMs: Math.round(startMs - offsetMs),
+			});
+		}
+	}
+	return clips;
 }
 
 /** Moving keeps the footage window, while dragging an edge trims it. */

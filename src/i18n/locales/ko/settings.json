@@ -138,6 +138,7 @@
 		"webcamHeight": "웹캠 높이",
 		"webcamStartOffset": "영상 시작 오프셋",
 		"webcamCircle": "원형 웹캠",
+		"recordWebcam": "웹캠 녹화",
 		"webcamSeparateAudio": "오디오를 타임라인으로 분리",
 		"webcamAudioSeparated": "영상 오디오가 이제 타임라인의 별도 클립입니다",
 		"webcamFootageAudio": "영상 오디오 포함",

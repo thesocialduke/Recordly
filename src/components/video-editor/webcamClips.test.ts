@@ -32,6 +32,57 @@ describe("resolveWebcamClips", () => {
 	});
 });
 
+describe("recorded webcam clips", () => {
+	const recorded = { sourcePath: "/tmp/recording-1-webcam.webm", timeOffsetMs: 500 };
+	const screen = (overrides = {}) => ({
+		id: "clip-1",
+		startMs: 0,
+		endMs: 10_000,
+		sourceStartMs: 34_000,
+		speed: 1,
+		...overrides,
+	});
+
+	it("follows the screen clips so a trimmed recording keeps its webcam in sync", () => {
+		expect(resolveWebcamClips(recorded, 60_000, [screen()])).toEqual([
+			{ id: "webcam-clip-1", startMs: 0, endMs: 10_000, sourceStartMs: 33_500 },
+		]);
+	});
+
+	it("starts late when the webcam began after the screen", () => {
+		expect(
+			resolveWebcamClips({ ...recorded, timeOffsetMs: 2000 }, 60_000, [
+				screen({ sourceStartMs: 0 }),
+			])[0],
+		).toMatchObject({ startMs: 2000, endMs: 10_000, sourceStartMs: 0 });
+	});
+
+	it("gives each screen clip its own webcam clip, scaled by speed", () => {
+		const clips = resolveWebcamClips(recorded, 60_000, [
+			screen({ sourceStartMs: 1000, endMs: 4000 }),
+			screen({ id: "clip-2", startMs: 4000, endMs: 6000, sourceStartMs: 20_000, speed: 2 }),
+		]);
+		expect(clips).toHaveLength(2);
+		expect(clips[1]).toMatchObject({ startMs: 4000, endMs: 6000, sourceStartMs: 19_500 });
+		expect(clips[0]?.id).not.toBe(clips[1]?.id);
+	});
+
+	it("skips the empty parts of an imported sequence", () => {
+		const clips = resolveWebcamClips(
+			{
+				sourcePath: "/tmp/sequence.mp4",
+				timeOffsetMs: 0,
+				visibleRanges: [{ startMs: 2000, endMs: 3000 }],
+			},
+			60_000,
+			[screen({ sourceStartMs: 0 })],
+		);
+		expect(clips).toEqual([
+			{ id: "webcam-clip-1", startMs: 2000, endMs: 3000, sourceStartMs: 2000 },
+		]);
+	});
+});
+
 describe("applyWebcamClipSpan", () => {
 	it("moves a clip without changing which footage it shows", () => {
 		expect(
