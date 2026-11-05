@@ -131,20 +131,31 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		let hasWebcamAudio = false;
 		const outputEntries: PreparedOfflineRender["outputEntries"] = [];
 		if (this.webcamAudioTrack) {
-			const { path, offsetMs, gain, timeline } = this.webcamAudioTrack;
+			const { path, offsetMs, gain, timeline, clips } = this.webcamAudioTrack;
 			const buffer = await this.decodeAudioFromUrl(path);
 			if (buffer && timeline === "output") {
 				hasWebcamAudio = true;
-				outputEntries.push({
-					buffer,
-					region: {
+				const spans = clips ?? [
+					{
 						id: "webcam-footage",
-						audioPath: path,
 						startMs: offsetMs,
 						endMs: offsetMs + buffer.duration * 1000,
-						volume: gain,
+						sourceStartMs: 0,
 					},
-				});
+				];
+				for (const { id, startMs, endMs, sourceStartMs } of spans) {
+					outputEntries.push({
+						buffer,
+						region: {
+							id,
+							audioPath: path,
+							startMs,
+							endMs,
+							volume: gain,
+							sourceOffsetMs: sourceStartMs,
+						},
+					});
+				}
 			} else if (buffer) {
 				hasWebcamAudio = true;
 				companionEntries.push({ buffer, gain, startDelaySec: offsetMs / 1000 });
@@ -443,9 +454,9 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		if (localEndSec <= 0 || localStartSec >= chunkDurationSec) return;
 
 		// Clip to chunk bounds
-		let bufferOffsetSec = 0;
+		let bufferOffsetSec = (region.sourceOffsetMs ?? 0) / 1000;
 		if (localStartSec < 0) {
-			bufferOffsetSec = -localStartSec;
+			bufferOffsetSec -= localStartSec;
 			localStartSec = 0;
 		}
 		if (localEndSec > chunkDurationSec) {

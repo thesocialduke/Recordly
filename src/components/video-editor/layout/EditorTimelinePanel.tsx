@@ -10,6 +10,7 @@ import type { useTimelineProjection } from "../hooks/useTimelineProjection";
 import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
 import type { useTimelineState } from "../state/useTimelineState";
 import TimelineEditor, { type TimelineEditorHandle } from "../timeline/TimelineEditor";
+import { isWebcamClipId } from "../webcamClips";
 
 type Props = {
 	panelRef?: RefObject<HTMLDivElement | null>;
@@ -87,15 +88,34 @@ export function EditorTimelinePanel(props: Props) {
 				onSelectZoom={zoomCommands.handleSelectZoom}
 				trimRegions={timeline.trimRegions}
 				clipRegions={timeline.clipRegions}
-				onClipSplit={clipCommands.handleClipSplit}
+				onClipSplit={(splitMs) => {
+					if (isWebcamClipId(timeline.selectedAudioId)) {
+						audio.splitWebcamClipAt(splitMs);
+					} else {
+						clipCommands.handleClipSplit(splitMs);
+					}
+				}}
 				onClipDelete={clipCommands.handleClipDelete}
 				onClipSpanChange={clipCommands.handleClipSpanChange}
 				selectedClipId={timeline.selectedClipId}
 				onSelectClip={clipCommands.handleSelectClip}
-				audioRegions={timeline.audioRegions}
+				audioRegions={audio.timelineAudioRegions}
 				onAudioAdded={audioCommands.handleAudioAdded}
-				onAudioSpanChange={audioCommands.handleAudioSpanChange}
-				onAudioDelete={audioCommands.handleAudioDelete}
+				onAudioSpanChange={(id, span, trackIndex) => {
+					if (isWebcamClipId(id)) {
+						audio.changeWebcamClipSpan(id, span);
+					} else {
+						audioCommands.handleAudioSpanChange(id, span, trackIndex);
+					}
+				}}
+				onAudioDelete={(id) => {
+					if (isWebcamClipId(id)) {
+						audio.deleteWebcamClip(id);
+						audioCommands.handleSelectAudio(null);
+					} else {
+						audioCommands.handleAudioDelete(id);
+					}
+				}}
 				selectedAudioId={timeline.selectedAudioId}
 				onSelectAudio={audioCommands.handleSelectAudio}
 				captionRegions={projection.effectiveCaptionRegions}

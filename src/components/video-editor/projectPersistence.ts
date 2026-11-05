@@ -1034,6 +1034,18 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			...(isFiniteNumber(webcam.audioVolume)
 				? { audioVolume: clamp(webcam.audioVolume, 0, 1) }
 				: {}),
+			...(Array.isArray(webcam.clips)
+				? {
+						clips: webcam.clips.filter(
+							(clip) =>
+								typeof clip?.id === "string" &&
+								isFiniteNumber(clip.startMs) &&
+								isFiniteNumber(clip.endMs) &&
+								isFiniteNumber(clip.sourceStartMs) &&
+								clip.endMs > clip.startMs,
+						),
+					}
+				: {}),
 			margin: isFiniteNumber(webcam.margin)
 				? clamp(webcam.margin, 0, 96)
 				: DEFAULT_WEBCAM_MARGIN,

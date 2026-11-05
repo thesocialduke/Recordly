@@ -4,6 +4,7 @@ import type {
 	ClipRegion,
 	SourceAudioTrackSettings,
 	TrimRegion,
+	WebcamClip,
 } from "@/components/video-editor/types";
 
 export type SourceTrackId = "mic" | "system" | "mixed";
@@ -15,6 +16,8 @@ export interface WebcamAudioTrack {
 	gain: number;
 	/** "output" runs on the edit's timeline, ignoring screen trims, speed, and clip mutes. */
 	timeline: "source" | "output";
+	/** Pieces kept on the timeline; the whole file plays from the offset when unset. */
+	clips?: WebcamClip[];
 }
 
 export const AUDIO_BITRATE = 128_000;

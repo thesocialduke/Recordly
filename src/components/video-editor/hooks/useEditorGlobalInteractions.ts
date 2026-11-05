@@ -2,6 +2,7 @@ import { type RefObject, useEffect, useRef } from "react";
 import type { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import type { useTimelineState } from "../state/useTimelineState";
+import { isWebcamClipId } from "../webcamClips";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 
 type Input = {
@@ -114,6 +115,7 @@ export function useEditorGlobalInteractions({
 	useEffect(() => {
 		if (
 			timeline.selectedAudioId &&
+			!isWebcamClipId(timeline.selectedAudioId) &&
 			!timeline.audioRegions.some(({ id }) => id === timeline.selectedAudioId)
 		) {
 			timeline.setSelectedAudioId(null);

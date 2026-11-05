@@ -1,13 +1,20 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import { resolveSourceTrackRoutingPolicy } from "@/lib/exporter/sourceTrackRoutingPolicy";
-import type { AudioRegion, ClipRegion, WebcamOverlaySettings } from "../types";
+import type { AudioRegion, ClipRegion, WebcamClip, WebcamOverlaySettings } from "../types";
 import { findClipAtTimelineTime } from "../types";
 import { isClipMutedById } from "./clipAudio";
 import { useAudioPreviewSync } from "./useAudioPreviewSync";
 import { useClipAudioSettingsController } from "./useClipAudioSettingsController";
 import { useSourceAudioFallback } from "./useSourceAudioFallback";
-import { resolveWebcamAudioTrack, useWebcamHasAudio } from "./useWebcamAudio";
+import { isWebcamOnOutputTimeline } from "../videoPlayback/webcamSync";
+import {
+	applyWebcamClipSpan,
+	getWebcamClipTimelineRegions,
+	resolveWebcamClips,
+	splitWebcamClip,
+} from "../webcamClips";
+import { resolveWebcamAudioTrack, useWebcamMediaInfo } from "./useWebcamAudio";
 
 function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
 	if (!input) return null;
@@ -46,6 +53,7 @@ interface UseVideoEditorAudioParams {
 	summarizeErrorMessage: (message: string) => string;
 	onSourceFallbackLoadError: (error: unknown) => void;
 	webcam: WebcamOverlaySettings;
+	setWebcam: React.Dispatch<React.SetStateAction<WebcamOverlaySettings>>;
 }
 
 export function useVideoEditorAudio({
@@ -66,6 +74,7 @@ export function useVideoEditorAudio({
 	summarizeErrorMessage,
 	onSourceFallbackLoadError,
 	webcam,
+	setWebcam,
 }: UseVideoEditorAudioParams) {
 	const fallbackLookupSourcePath = useMemo(
 		() => extractLocalPathFromMediaServerUrl(currentSourcePath) ?? currentSourcePath,
@@ -132,7 +141,49 @@ export function useVideoEditorAudio({
 		onSourceFallbackLoadError,
 	});
 
-	const webcamHasAudio = useWebcamHasAudio(webcam.enabled ? webcam.sourcePath : null);
+	const { hasAudio: webcamHasAudio, durationMs: webcamDurationMs } = useWebcamMediaInfo(
+		webcam.enabled ? webcam.sourcePath : null,
+	);
+	const timelineAudioRegions = useMemo(() => {
+		if (!webcam.enabled || !webcam.sourcePath || !isWebcamOnOutputTimeline(webcam)) {
+			return audioRegions;
+		}
+		return [
+			...audioRegions,
+			...getWebcamClipTimelineRegions(
+				resolveWebcamClips(webcam, webcamDurationMs),
+				webcam.sourcePath,
+				webcam.audioVolume ?? 1,
+			),
+		];
+	}, [audioRegions, webcam, webcamDurationMs]);
+	const updateWebcamClips = useCallback(
+		(update: (clips: WebcamClip[]) => WebcamClip[]) => {
+			setWebcam((previous) => ({
+				...previous,
+				clips: update(resolveWebcamClips(previous, webcamDurationMs)),
+			}));
+		},
+		[setWebcam, webcamDurationMs],
+	);
+	const changeWebcamClipSpan = useCallback(
+		(id: string, span: { start: number; end: number }) => {
+			updateWebcamClips((clips) => applyWebcamClipSpan(clips, id, span, webcamDurationMs));
+		},
+		[updateWebcamClips, webcamDurationMs],
+	);
+	const deleteWebcamClip = useCallback(
+		(id: string) => {
+			updateWebcamClips((clips) => clips.filter((clip) => clip.id !== id));
+		},
+		[updateWebcamClips],
+	);
+	const splitWebcamClipAt = useCallback(
+		(timeMs: number) => {
+			updateWebcamClips((clips) => splitWebcamClip(clips, timeMs));
+		},
+		[updateWebcamClips],
+	);
 	const webcamAudioTrack = useMemo(
 		() => resolveWebcamAudioTrack(webcam, webcamHasAudio),
 		[webcam, webcamHasAudio],
@@ -143,6 +194,10 @@ export function useVideoEditorAudio({
 			: 0;
 
 	return {
+		timelineAudioRegions,
+		changeWebcamClipSpan,
+		deleteWebcamClip,
+		splitWebcamClipAt,
 		webcamHasAudio,
 		webcamAudioTrack,
 		webcamPreviewVolume,

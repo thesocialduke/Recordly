@@ -54,10 +54,9 @@ import {
 import { getSceneEffectMetrics } from "@/components/video-editor/videoPlayback/sceneEffects";
 import { resolveSceneZoomTarget } from "@/components/video-editor/videoPlayback/sceneMotion";
 import {
-	getWebcamMediaTargetTimeSeconds,
-	isWebcamFootageActive,
 	isWebcamOnOutputTimeline,
 	isWebcamVisibleAtSourceTime,
+	resolveWebcamMediaTime,
 } from "@/components/video-editor/videoPlayback/webcamSync";
 import {
 	applyZoomTransform,
@@ -2545,13 +2544,13 @@ export class FrameRenderer {
 	}
 
 	private getExpectedWebcamTargetTimeSeconds(targetTime: number): number {
-		return getWebcamMediaTargetTimeSeconds({
-			currentTime: targetTime,
+		return resolveWebcamMediaTime({
+			webcam: this.config.webcam,
+			clockTime: targetTime,
 			webcamDuration: Number.isFinite(this.webcamVideoElement?.duration)
 				? this.webcamVideoElement?.duration
 				: null,
-			timeOffsetMs: this.config.webcam?.timeOffsetMs,
-		});
+		}).mediaTime;
 	}
 
 	// ForwardFrameSource cannot rewind, so clips that step back in source time need a fresh decoder.
@@ -2760,13 +2759,13 @@ export class FrameRenderer {
 			return false;
 		}
 		const elementDuration = this.webcamVideoElement?.duration;
-		return !isWebcamFootageActive({
-			currentTime: clockTime,
+		return !resolveWebcamMediaTime({
+			webcam: this.config.webcam,
+			clockTime,
 			webcamDuration:
 				this.webcamForwardFrameSource?.getDurationSec() ??
 				(Number.isFinite(elementDuration) ? elementDuration : null),
-			timeOffsetMs: this.config.webcam?.timeOffsetMs,
-		});
+		}).active;
 	}
 
 	private updateWebcamOverlay(referenceTimeSeconds = this.getWebcamClockTime()): void {

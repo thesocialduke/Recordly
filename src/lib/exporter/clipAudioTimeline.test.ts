@@ -103,6 +103,26 @@ describe("webcam footage audio", () => {
 		expect(later.starts[0]?.mock.calls[0]?.[1]).toBe(30);
 	});
 
+	it("plays only the kept pieces of split footage, from the right place in the file", async () => {
+		const processor = new SilentScreenProcessor();
+		processor.setWebcamAudioTrack({
+			...track,
+			timeline: "output",
+			clips: [
+				{ id: "a", startMs: 0, endMs: 5000, sourceStartMs: 0 },
+				{ id: "b", startMs: 5000, endMs: 9000, sourceStartMs: 12_000 },
+			],
+		});
+		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);
+		expect(prepared.outputEntries).toHaveLength(2);
+
+		const { starts, ctx } = context();
+		const second = prepared.outputEntries[1];
+		if (!second) throw new Error("missing clip");
+		processor.scheduleOverlay(ctx, second.buffer, second.region, prepared.slices, 0, 30, true);
+		expect(starts[0]?.mock.calls[0]).toEqual([5, 12, 4]);
+	});
+
 	it("does not fail or add a track when no footage audio is configured", async () => {
 		const processor = new TestAudioProcessor();
 		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);

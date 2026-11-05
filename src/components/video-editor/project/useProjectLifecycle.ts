@@ -358,6 +358,7 @@ export function useProjectLifecycle(input: Input) {
 			enabled: true,
 			sourcePath: result.path ?? null,
 			visibleRanges: undefined,
+			clips: undefined,
 			timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 		}));
 		await syncRecordingSessionWebcam(result.path, DEFAULT_WEBCAM_TIME_OFFSET_MS);
@@ -369,6 +370,7 @@ export function useProjectLifecycle(input: Input) {
 			enabled: false,
 			sourcePath: null,
 			visibleRanges: undefined,
+			clips: undefined,
 			timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 		}));
 		await syncRecordingSessionWebcam(null);

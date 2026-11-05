@@ -462,6 +462,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		outputSettings[AVVideoWidthKey] = outputWidth
 		outputSettings[AVVideoHeightKey] = outputHeight
+		// The 4K preset budgets for 30fps; sharp screen text needs enough bits at the real frame rate.
+		var compressionProperties = outputSettings[AVVideoCompressionPropertiesKey] as? [String: Any] ?? [:]
+		compressionProperties[AVVideoAverageBitRateKey] = Self.videoBitRate(width: outputWidth, height: outputHeight, fps: requestedFPS)
+		compressionProperties[AVVideoExpectedSourceFrameRateKey] = requestedFPS
+		compressionProperties[AVVideoMaxKeyFrameIntervalKey] = requestedFPS
+		outputSettings[AVVideoCompressionPropertiesKey] = compressionProperties
 		outputSettings[AVVideoColorPropertiesKey] = [
 			AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
 			AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
@@ -1200,6 +1206,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			CMSampleBufferSetDataBufferFromAudioBufferList(sample, blockBufferAllocator: nil,
 				blockBufferMemoryAllocator: nil, flags: 0, bufferList: pcm.audioBufferList) == noErr else { return nil }
 		return sample
+	}
+
+	private static func videoBitRate(width: Int, height: Int, fps: Int) -> Int {
+		let bitsPerPixel = 0.12
+		let target = Double(width * height * fps) * bitsPerPixel
+		return min(80_000_000, max(16_000_000, Int(target)))
 	}
 
 	private static func audioOutputSettings(bitRate: Int) -> [String: Any] {
