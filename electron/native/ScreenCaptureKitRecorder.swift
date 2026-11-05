@@ -248,6 +248,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var windowCropDisplayId: CGDirectDisplayID?
 	private var excludedProcessIds = Set<Int32>()
 	private var lastCroppedPixelBuffer: CVPixelBuffer?
+	private var recentCroppedPixelBuffer: CVPixelBuffer?
+	private var recentCroppedFrameTime: CMTime = .invalid
+	private var settledCroppedPixelBuffer: CVPixelBuffer?
+	private var isTrackedWindowHidden = false
+	private var trackedWindowShownTime: CMTime = .invalid
 	private let imageContext = CIContext(options: [.cacheIntermediates: false])
 	private var systemAudioWriter: AVAssetWriter?
 	private var systemAudioInput: AVAssetWriterInput?
@@ -684,12 +689,15 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 
 		if outputType.rawValue == microphoneOutputTypeRawValue {
+			// The microphone arrives in the device's native layout (often wider than stereo,
+			// with the voice on one channel) while both writers expect stereo.
+			let microphoneBuffer = microphoneSampleWithStereoChannels(sampleBuffer, at: presentationTime) ?? sampleBuffer
 			if let microphoneOnlyInput {
-				appendAudioSampleBuffer(sampleBuffer, to: microphoneOnlyInput, of: microphoneOnlyWriter, firstSampleTime: &firstMicrophoneSampleTime, lastPresentationTime: &lastMicrophonePresentationTime, presentationTime: presentationTime)
+				appendAudioSampleBuffer(microphoneBuffer, to: microphoneOnlyInput, of: microphoneOnlyWriter, firstSampleTime: &firstMicrophoneSampleTime, lastPresentationTime: &lastMicrophonePresentationTime, presentationTime: presentationTime)
 			}
 			// Write mic to inline video track only if there's no system audio (avoids double-writing)
 			if !capturesSystemAudio, let inlineAudioInput {
-				appendAudioSampleBuffer(sampleBuffer, to: inlineAudioInput, of: assetWriter, firstSampleTime: &firstInlineAudioSampleTime, lastPresentationTime: &lastInlineAudioPresentationTime, presentationTime: presentationTime)
+				appendAudioSampleBuffer(microphoneBuffer, to: inlineAudioInput, of: assetWriter, firstSampleTime: &firstInlineAudioSampleTime, lastPresentationTime: &lastInlineAudioPresentationTime, presentationTime: presentationTime)
 			}
 			return
 		}
@@ -702,6 +710,32 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			  let adaptor = videoPixelBufferAdaptor,
 			  let pool = adaptor.pixelBufferPool,
 			  let source = CMSampleBufferGetImageBuffer(sampleBuffer) else { return false }
+
+		// While the window is minimized or on another Space, the display shows other
+		// content, so hold an earlier frame of the window instead of cropping it. This
+		// is checked per frame because the 0.5s window poll would let that content in.
+		// The hold lasts a second past its return to cover the restore animation.
+		if let trackedWindowId {
+			if !Self.isWindowOnScreen(trackedWindowId) {
+				// The newest kept frame may be from the hide animation, so don't let it
+				// become the held frame if the window hides again soon after returning.
+				if !isTrackedWindowHidden { recentCroppedPixelBuffer = settledCroppedPixelBuffer }
+				isTrackedWindowHidden = true
+				trackedWindowShownTime = .invalid
+			} else if isTrackedWindowHidden {
+				if !trackedWindowShownTime.isValid { trackedWindowShownTime = presentationTime }
+				if CMTimeGetSeconds(CMTimeSubtract(presentationTime, trackedWindowShownTime)) >= 1 {
+					isTrackedWindowHidden = false
+				}
+			}
+			if isTrackedWindowHidden {
+				guard let frozen = settledCroppedPixelBuffer ?? lastCroppedPixelBuffer,
+					  adaptor.append(frozen, withPresentationTime: presentationTime) else { return false }
+				// finishCapture repeats lastCroppedPixelBuffer as the tail frame.
+				lastCroppedPixelBuffer = frozen
+				return true
+			}
+		}
 
 		var destination: CVPixelBuffer?
 		guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &destination) == kCVReturnSuccess,
@@ -735,7 +769,16 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		)
 
 		let appended = adaptor.append(destination, withPresentationTime: presentationTime)
-		if appended { lastCroppedPixelBuffer = destination }
+		if appended {
+			lastCroppedPixelBuffer = destination
+			// macOS reports the window off screen only after the minimize or Space
+			// animation ends, so keep a frame from at least a second before that.
+			if !recentCroppedFrameTime.isValid || CMTimeGetSeconds(CMTimeSubtract(presentationTime, recentCroppedFrameTime)) >= 1 {
+				settledCroppedPixelBuffer = recentCroppedPixelBuffer
+				recentCroppedPixelBuffer = destination
+				recentCroppedFrameTime = presentationTime
+			}
+		}
 		return appended
 	}
 
@@ -880,6 +923,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		windowCropDisplayId = nil
 		excludedProcessIds.removeAll()
 		lastCroppedPixelBuffer = nil
+		recentCroppedPixelBuffer = nil
+		recentCroppedFrameTime = .invalid
+		settledCroppedPixelBuffer = nil
+		isTrackedWindowHidden = false
+		trackedWindowShownTime = .invalid
 		systemAudioWriter = nil
 		systemAudioInput = nil
 		microphoneOnlyWriter = nil
@@ -1055,6 +1103,105 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		if input === inlineAudioInput { lastInlineAudioDuration = sampleBuffer.duration }
 	}
 
+	/// ScreenCaptureKit forwards the microphone at the device's native format, which can be
+	/// multi-channel integer PCM (e.g. a 4-channel 24-bit audio interface). The AAC writers
+	/// expect stereo float, so keep the channel that carries the voice and duplicate it.
+	private func microphoneSampleWithStereoChannels(_ sampleBuffer: CMSampleBuffer, at presentationTime: CMTime) -> CMSampleBuffer? {
+		guard let format = sampleBuffer.formatDescription,
+			let asbd = format.audioStreamBasicDescription,
+			asbd.mFormatID == kAudioFormatLinearPCM else { return nil }
+		let frameCount = Int(sampleBuffer.numSamples)
+		let channels = Int(asbd.mChannelsPerFrame)
+		let bits = Int(asbd.mBitsPerChannel)
+		let bytesPerSample = bits / 8
+		guard frameCount > 0, channels > 0, [16, 24, 32, 64].contains(bits) else { return nil }
+		let isNonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+		let frameStride = isNonInterleaved ? bytesPerSample : max(Int(asbd.mBytesPerFrame), bytesPerSample * channels)
+
+		var sizeNeeded = 0
+		var block: CMBlockBuffer?
+		guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sampleBuffer, bufferListSizeNeededOut: &sizeNeeded,
+			bufferListOut: nil, bufferListSize: 0, blockBufferAllocator: nil,
+			blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: nil) == noErr,
+			sizeNeeded > 0 else { return nil }
+		let storage = UnsafeMutableRawPointer.allocate(byteCount: sizeNeeded, alignment: 16)
+		defer { storage.deallocate() }
+		let list = storage.assumingMemoryBound(to: AudioBufferList.self)
+		guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sampleBuffer, bufferListSizeNeededOut: nil,
+			bufferListOut: list, bufferListSize: sizeNeeded, blockBufferAllocator: kCFAllocatorDefault,
+			blockBufferMemoryAllocator: kCFAllocatorDefault, flags: 0, blockBufferOut: &block) == noErr else { return nil }
+		let buffers = UnsafeMutableAudioBufferListPointer(list)
+		guard !buffers.isEmpty else { return nil }
+
+		let isFloat = asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0
+		guard isFloat || asbd.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0 else { return nil }
+
+		func sampleValue(channel: Int, frame: Int) -> Float {
+			let bufferIndex = isNonInterleaved ? channel : 0
+			guard bufferIndex < buffers.count else { return 0 }
+			let offset = frame * frameStride + (isNonInterleaved ? 0 : channel * bytesPerSample)
+			guard let data = buffers[bufferIndex].mData,
+				offset >= 0, offset + bytesPerSample <= Int(buffers[bufferIndex].mDataByteSize) else { return 0 }
+			if isFloat {
+				if bits == 32 { return data.loadUnaligned(fromByteOffset: offset, as: Float32.self) }
+				if bits == 64 { return Float(data.loadUnaligned(fromByteOffset: offset, as: Float64.self)) }
+				return 0
+			}
+			if bits == 16 { return Float(data.loadUnaligned(fromByteOffset: offset, as: Int16.self)) / 32_768 }
+			if bits == 24 {
+				let b0 = data.loadUnaligned(fromByteOffset: offset, as: UInt8.self)
+				let b1 = data.loadUnaligned(fromByteOffset: offset + 1, as: UInt8.self)
+				let b2 = data.loadUnaligned(fromByteOffset: offset + 2, as: UInt8.self)
+				var value = Int32(b0) | Int32(b1) << 8 | Int32(b2) << 16
+				if value & 0x80_0000 != 0 { value -= 0x100_0000 }
+				return Float(value) / 8_388_608
+			}
+			if bits == 32 { return Float(data.loadUnaligned(fromByteOffset: offset, as: Int32.self)) / 2_147_483_648 }
+			return 0
+		}
+
+		var peaks = [Float](repeating: 0, count: channels)
+		for channel in 0..<channels {
+			var peak: Float = 0
+			for frame in 0..<frameCount { peak = max(peak, abs(sampleValue(channel: channel, frame: frame))) }
+			peaks[channel] = peak
+		}
+		// A two-channel microphone already carries signal on both channels.
+		if channels == 2, peaks[0] > 0.001, peaks[1] > 0.001 { return sampleBuffer }
+		let keepStereoPair = channels > 2 && peaks[0] > 0.001 && peaks[1] > 0.001
+		let primary = peaks.indices.max { peaks[$0] < peaks[$1] } ?? 0
+
+		guard let stereoFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: asbd.mSampleRate,
+				channels: 2, interleaved: false),
+			let stereo = AVAudioPCMBuffer(pcmFormat: stereoFormat, frameCapacity: AVAudioFrameCount(frameCount)),
+			let stereoData = stereo.floatChannelData else { return nil }
+		stereo.frameLength = AVAudioFrameCount(frameCount)
+		for frame in 0..<frameCount {
+			if keepStereoPair {
+				stereoData[0][frame] = sampleValue(channel: 0, frame: frame)
+				stereoData[1][frame] = sampleValue(channel: 1, frame: frame)
+			} else {
+				let value = sampleValue(channel: primary, frame: frame)
+				stereoData[0][frame] = value
+				stereoData[1][frame] = value
+			}
+		}
+		return makeMicrophoneSample(stereo, format: stereoFormat.formatDescription, at: presentationTime)
+	}
+
+	private func makeMicrophoneSample(_ pcm: AVAudioPCMBuffer, format: CMFormatDescription, at time: CMTime) -> CMSampleBuffer? {
+		var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: CMTimeScale(pcm.format.sampleRate)), presentationTimeStamp: time, decodeTimeStamp: .invalid)
+		var sample: CMSampleBuffer?
+		guard CMSampleBufferCreate(allocator: kCFAllocatorDefault, dataBuffer: nil,
+			dataReady: false, makeDataReadyCallback: nil, refcon: nil, formatDescription: format,
+			sampleCount: Int(pcm.frameLength), sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+			sampleSizeEntryCount: 0, sampleSizeArray: nil, sampleBufferOut: &sample) == noErr,
+			let sample,
+			CMSampleBufferSetDataBufferFromAudioBufferList(sample, blockBufferAllocator: nil,
+				blockBufferMemoryAllocator: nil, flags: 0, bufferList: pcm.audioBufferList) == noErr else { return nil }
+		return sample
+	}
+
 	private static func audioOutputSettings(bitRate: Int) -> [String: Any] {
 		[
 			AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -1138,11 +1285,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 				let availableContent: SCShareableContent
 				do {
-					availableContent = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+					availableContent = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
 				} catch {
 					continue
 				}
 
+				// Only a closed window ends the recording. A minimized window or one on
+				// another Space is still listed, just not on screen.
 				guard let window = availableContent.windows.first(where: { $0.windowID == trackedWindowId }) else {
 					print("WINDOW_UNAVAILABLE")
 					fflush(stdout)
@@ -1162,6 +1311,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					}
 					return
 				}
+
+				// An off-screen window keeps its last frame, so leave the crop as it is.
+				guard window.isOnScreen else { continue }
 
 				guard let display = Self.captureDisplay(for: window.frame, from: availableContent.displays) else {
 					continue
@@ -1202,6 +1354,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				}
 			}
 		}
+	}
+
+	private static func isWindowOnScreen(_ windowId: UInt32) -> Bool {
+		let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], windowId) as? [[String: Any]]
+		return info?.first?[kCGWindowIsOnscreen as String] as? Bool ?? false
 	}
 
 	private static func captureDisplay(for frame: CGRect, from displays: [SCDisplay]) -> SCDisplay? {

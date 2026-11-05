@@ -8,6 +8,15 @@ import type {
 
 export type SourceTrackId = "mic" | "system" | "mixed";
 
+/** Sound from the webcam overlay's footage. */
+export interface WebcamAudioTrack {
+	path: string;
+	offsetMs: number;
+	gain: number;
+	/** "output" runs on the edit's timeline, ignoring screen trims, speed, and clip mutes. */
+	timeline: "source" | "output";
+}
+
 export const AUDIO_BITRATE = 128_000;
 export const DECODE_BACKPRESSURE_LIMIT = 20;
 export const ENCODE_BACKPRESSURE_LIMIT = 20;
@@ -118,6 +127,7 @@ export interface PreparedOfflineRender {
 	mainBufferEntry: { buffer: AudioBuffer; gain: number } | null;
 	companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number; gain: number }>;
 	regionEntries: Array<{ buffer: AudioBuffer; region: AudioRegion }>;
+	outputEntries: Array<{ buffer: AudioBuffer; region: AudioRegion }>;
 	mutedSourceOutputRangesSec: Array<{ startSec: number; endSec: number }>;
 	slices: TimelineSlice[];
 	outputDurationMs: number;

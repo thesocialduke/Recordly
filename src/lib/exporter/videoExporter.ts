@@ -19,6 +19,7 @@ import type {
 } from "@/components/video-editor/types";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
+import type { WebcamAudioTrack } from "./audioProcessorShared";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
 import {
 	advanceFinalizationProgress,
@@ -94,6 +95,7 @@ interface VideoExporterConfig extends ExportConfig {
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
+	webcamAudioTrack?: WebcamAudioTrack | null;
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -268,7 +270,9 @@ export class VideoExporter {
 
 			const hasAudioRegions = (this.config.audioRegions ?? []).length > 0;
 			const hasSourceAudioFallback = (this.config.sourceAudioFallbackPaths ?? []).length > 0;
-			const hasAudio = videoInfo.hasAudio || hasAudioRegions || hasSourceAudioFallback;
+			const hasWebcamAudio = Boolean(this.config.webcamAudioTrack);
+			const hasAudio =
+				videoInfo.hasAudio || hasAudioRegions || hasSourceAudioFallback || hasWebcamAudio;
 
 			if (!useNativeEncoder) {
 				this.muxer = new VideoMuxer(this.config, hasAudio && !shouldUseFfmpegAudioFallback);
@@ -393,8 +397,9 @@ export class VideoExporter {
 
 			if (hasAudio && !shouldUseFfmpegAudioFallback && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
-				if (demuxer || hasAudioRegions || hasSourceAudioFallback) {
+				if (demuxer || hasAudioRegions || hasSourceAudioFallback || hasWebcamAudio) {
 					this.audioProcessor = new AudioProcessor();
+					this.audioProcessor.setWebcamAudioTrack(this.config.webcamAudioTrack);
 					this.audioProcessor.setOnProgress((progress) => {
 						this.reportFinalizingProgress(totalFrames, 99, progress);
 					});
@@ -566,7 +571,8 @@ export class VideoExporter {
 		if (
 			!videoInfo.hasAudio &&
 			sourceAudioFallbackPaths.length === 0 &&
-			audioRegions.length === 0
+			audioRegions.length === 0 &&
+			!this.config.webcamAudioTrack
 		) {
 			return { audioMode: "none" };
 		}
@@ -575,6 +581,7 @@ export class VideoExporter {
 			requiresClipTimelineRendering(this.config.clipRegions) ||
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
+			this.config.webcamAudioTrack ||
 			sourceAudioFallbackPaths.length > 1 ||
 			hasTimedSourceAudioFallback ||
 			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
@@ -865,6 +872,7 @@ export class VideoExporter {
 			audioPlan.strategy === "offline-render-fallback"
 		) {
 			this.audioProcessor = new AudioProcessor();
+			this.audioProcessor.setWebcamAudioTrack(this.config.webcamAudioTrack);
 			this.audioProcessor.setOnProgress((progress) => {
 				this.reportFinalizingProgress(totalFrames, 99, progress);
 			});
@@ -963,6 +971,7 @@ export class VideoExporter {
 			audioPlan.strategy === "offline-render-fallback"
 		) {
 			this.audioProcessor = new AudioProcessor();
+			this.audioProcessor.setWebcamAudioTrack(this.config.webcamAudioTrack);
 			this.audioProcessor.setOnProgress((progress) => {
 				this.reportFinalizingProgress(totalFrames, 99, progress);
 			});

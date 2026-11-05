@@ -1028,6 +1028,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			timeOffsetMs: isFiniteNumber(webcam.timeOffsetMs)
 				? Math.round(webcam.timeOffsetMs)
 				: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+			...(typeof webcam.audioEnabled === "boolean"
+				? { audioEnabled: webcam.audioEnabled }
+				: {}),
+			...(isFiniteNumber(webcam.audioVolume)
+				? { audioVolume: clamp(webcam.audioVolume, 0, 1) }
+				: {}),
 			margin: isFiniteNumber(webcam.margin)
 				? clamp(webcam.margin, 0, 96)
 				: DEFAULT_WEBCAM_MARGIN,

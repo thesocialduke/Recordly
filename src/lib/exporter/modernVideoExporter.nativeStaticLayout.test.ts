@@ -145,6 +145,30 @@ describe("ModernVideoExporter native static-layout eligibility", () => {
 		});
 	});
 
+	it("renders footage audio for a silent recording instead of skipping audio", () => {
+		const webcamAudioTrack = { path: "/tmp/footage.mp4", offsetMs: 0, gain: 1 };
+		const silentVideo = { ...videoInfo, hasAudio: false };
+
+		expect(createExporter().buildNativeAudioPlan(silentVideo)).toEqual({ audioMode: "none" });
+		expect(createExporter({ webcamAudioTrack }).buildNativeAudioPlan(silentVideo)).toMatchObject({
+			audioMode: "edited-track",
+			strategy: "offline-render-fallback",
+		});
+	});
+
+	it("does not copy source audio past footage mixing when the recording has sound", () => {
+		const webcamAudioTrack = { path: "/tmp/footage.mp4", offsetMs: 0, gain: 1 };
+
+		expect(
+			createExporter({ webcamAudioTrack }).buildNativeAudioPlan({
+				...videoInfo,
+				hasAudio: true,
+				audioCodec: "aac",
+				audioSampleRate: 48_000,
+			}),
+		).toMatchObject({ audioMode: "edited-track", strategy: "offline-render-fallback" });
+	});
+
 	it("allows native static-layout for H.264 source metadata", () => {
 		const exporter = createExporter();
 

@@ -22,6 +22,26 @@ function createProjectData(overrides: Partial<EditorProjectData> = {}): EditorPr
 	};
 }
 
+describe("hasUnsavedProjectChanges webcam offset", () => {
+	const withOffset = (timeOffsetMs: number, sourcePath = "/Users/test/webcam.mp4") =>
+		createProjectData({
+			editor: {
+				...createProjectData().editor,
+				webcam: { enabled: true, sourcePath, timeOffsetMs, size: 28 },
+			},
+		} as Partial<EditorProjectData>);
+
+	it("counts an offset edit on the same footage as unsaved", () => {
+		expect(hasUnsavedProjectChanges(withOffset(1500), withOffset(0))).toBe(true);
+	});
+
+	it("still ignores an offset that arrives with a restored session source", () => {
+		expect(hasUnsavedProjectChanges(withOffset(1500, "/Users/test/b.mp4"), withOffset(0))).toBe(
+			false,
+		);
+	});
+});
+
 describe("hasUnsavedProjectChanges", () => {
 	it("does not report changes before a project snapshot exists", () => {
 		expect(hasUnsavedProjectChanges(null, createProjectData())).toBe(false);

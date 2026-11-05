@@ -607,6 +607,54 @@ describe("ModernFrameRenderer webcam export fallback", () => {
 		expect(renderer.webcamVideoElement).toBeTruthy();
 	});
 
+	it("runs added footage on the edit's clock and hides it once it ends", () => {
+		const renderer = createRenderer() as any;
+		renderer.config.webcam = {
+			...DEFAULT_WEBCAM_OVERLAY,
+			enabled: true,
+			sourcePath: "/Users/test/New project.mp4",
+		};
+		renderer.currentVideoTime = 40;
+		renderer.currentOutputTime = 5.5;
+		renderer.webcamForwardFrameSource = { getDurationSec: () => 38 };
+
+		expect(renderer.getWebcamClockTime()).toBe(5.5);
+		expect(renderer.isWebcamFootageOver(5.5)).toBe(false);
+		expect(renderer.isWebcamFootageOver(38.5)).toBe(true);
+	});
+
+	it("keeps a recorded webcam on the recording's clock", () => {
+		const renderer = createRenderer() as any;
+		renderer.config.webcam = {
+			...DEFAULT_WEBCAM_OVERLAY,
+			enabled: true,
+			sourcePath: "/Users/test/recording-1-webcam.webm",
+		};
+		renderer.currentVideoTime = 40;
+		renderer.currentOutputTime = 5.5;
+
+		expect(renderer.getWebcamClockTime()).toBe(40);
+		expect(renderer.isWebcamFootageOver(40)).toBe(false);
+	});
+
+	it("restarts the webcam decoder when clips step back in source time", async () => {
+		const frame = { close: vi.fn() };
+		getForwardFrameAtTimeMock.mockResolvedValue(frame);
+		const renderer = createRenderer() as any;
+		renderer.config.webcam = { ...DEFAULT_WEBCAM_OVERLAY, enabled: true };
+		renderer.config.webcamUrl = "file:///tmp/webcam.mp4";
+
+		await renderer.setupWebcamSource();
+		const firstSource = renderer.webcamForwardFrameSource;
+		await renderer.syncWebcamFrame(5);
+		await renderer.syncWebcamFrame(2);
+
+		expect(renderer.webcamForwardFrameSource).not.toBe(firstSource);
+		expect(destroyForwardFrameSourceMock).toHaveBeenCalled();
+		expect(resolveMediaElementSourceMock).not.toHaveBeenCalled();
+		expect(renderer.lastSyncedWebcamTime).toBe(2);
+	});
+
 	it("tears down the media-element fallback when readiness times out", async () => {
 		vi.useFakeTimers();
 		const originalCreateElement = (globalThis as any).document.createElement;

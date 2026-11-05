@@ -34,6 +34,83 @@ function context() {
 	};
 }
 
+class SilentScreenProcessor extends TestAudioProcessor {
+	protected decodeAudioFromUrl = vi.fn(async (url: string) =>
+		url.includes("footage") ? ({ duration: 41.8, numberOfChannels: 2 } as AudioBuffer) : null,
+	);
+	protected getMediaDurationSec = vi.fn(async () => 30.7);
+}
+
+describe("webcam footage audio", () => {
+	const track = { path: "/tmp/footage.mp4", offsetMs: 0, gain: 0.8, timeline: "source" as const };
+
+	it("uses footage sound for a silent recording, bounded by the recording's length", async () => {
+		const processor = new SilentScreenProcessor();
+		processor.setWebcamAudioTrack(track);
+		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);
+
+		expect(prepared.mainBufferEntry).toBeNull();
+		expect(prepared.companionEntries).toEqual([
+			expect.objectContaining({ gain: 0.8, startDelaySec: 0 }),
+		]);
+		expect(prepared.outputDurationMs).toBeCloseTo(30_700);
+	});
+
+	it("keeps embedded screen audio alongside the footage instead of replacing it", async () => {
+		const processor = new TestAudioProcessor();
+		processor.setWebcamAudioTrack(track);
+		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);
+
+		expect(prepared.mainBufferEntry).not.toBeNull();
+		expect(prepared.companionEntries).toHaveLength(1);
+	});
+
+	it("carries negative offsets so playback can begin partway into the footage", async () => {
+		const processor = new SilentScreenProcessor();
+		processor.setWebcamAudioTrack({ ...track, offsetMs: -5000 });
+		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);
+
+		expect(prepared.companionEntries[0]?.startDelaySec).toBe(-5);
+	});
+
+	it("plays added footage from the start of the edit, even when the screen clip is muted", async () => {
+		// Mirrors a real project: the first 34.5s of the recording is cut and its sound muted.
+		const processor = new SilentScreenProcessor();
+		processor.setWebcamAudioTrack({ ...track, timeline: "output", gain: 1 });
+		const prepared = await processor.prepare(
+			"file:///tmp/screen.mp4",
+			[],
+			[],
+			[],
+			[],
+			undefined,
+			undefined,
+			[{ id: "c", startMs: 0, endMs: 20_000, sourceStartMs: 10_000, speed: 1, muted: true }],
+		);
+
+		expect(prepared.companionEntries).toHaveLength(0);
+		expect(prepared.outputEntries[0]?.region).toMatchObject({ startMs: 0, endMs: 41_800 });
+
+		const { starts, ctx } = context();
+		const entry = prepared.outputEntries[0];
+		if (!entry) throw new Error("missing footage entry");
+		processor.scheduleOverlay(ctx, entry.buffer, entry.region, prepared.slices, 0, 30, true);
+		expect(starts[0]?.mock.calls[0]).toEqual([0, 0, 30]);
+
+		// A later chunk keeps reading from the right place in the footage.
+		const later = context();
+		processor.scheduleOverlay(later.ctx, entry.buffer, entry.region, prepared.slices, 30, 30, true);
+		expect(later.starts[0]?.mock.calls[0]?.[1]).toBe(30);
+	});
+
+	it("does not fail or add a track when no footage audio is configured", async () => {
+		const processor = new TestAudioProcessor();
+		const prepared = await processor.prepare("file:///tmp/screen.mp4", [], [], [], []);
+
+		expect(prepared.companionEntries).toHaveLength(0);
+	});
+});
+
 describe("clip audio timeline", () => {
 	it("keeps the silent middle interval and schedules retained source at its timeline position", async () => {
 		const processor = new TestAudioProcessor();

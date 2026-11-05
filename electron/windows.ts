@@ -43,6 +43,7 @@ let hudOverlayMouseReassertTimer: NodeJS.Timeout | null = null;
 let hudOverlayRecordingActive = false;
 let hudCaptureStarting = false;
 let hudOverlayWebcamPreviewVisible = false;
+let hudOverlayTeleprompterActive = false;
 let countdownWindow: BrowserWindow | null = null;
 let capturePickerWindows: BrowserWindow[] = [];
 let areaRecordingBorderWindow: BrowserWindow | null = null;
@@ -166,8 +167,9 @@ function loadHudOverlayCaptureProtectionSetting(): boolean {
 	return hudOverlayHiddenFromCapture;
 }
 
+// An open teleprompter always hides the HUD from recordings, whatever the user setting says.
 export function getHudOverlayCaptureProtectionEnabled(): boolean {
-	return loadHudOverlayCaptureProtectionSetting();
+	return loadHudOverlayCaptureProtectionSetting() || hudOverlayTeleprompterActive;
 }
 
 function applyHudOverlayCaptureProtectionToWindow(hud: BrowserWindow, enabled: boolean): void {
@@ -195,7 +197,7 @@ ipcMain.handle("finish-recording-startup", () => {
 });
 
 export function reassertHudOverlayCaptureProtection(): boolean {
-	const enabled = loadHudOverlayCaptureProtectionSetting();
+	const enabled = getHudOverlayCaptureProtectionEnabled();
 	const hud = getHudOverlayWindow();
 	if (!hud) {
 		return enabled;
@@ -468,6 +470,36 @@ ipcMain.on("hud-overlay-set-webcam-preview-visible", (_event, visible: boolean) 
 	}
 });
 
+ipcMain.on("hud-overlay-set-teleprompter-active", (_event, active: boolean) => {
+	hudOverlayTeleprompterActive = Boolean(active);
+	reassertHudOverlayCaptureProtection();
+});
+
+// The macOS HUD is non-focusable so it never steals focus; the teleprompter
+// script editor borrows keyboard focus only while it is being edited.
+ipcMain.on("hud-overlay-set-keyboard-focus", (_event, focus: boolean) => {
+	const hud = getHudOverlayWindow();
+	if (!hud || process.platform !== "darwin") {
+		return;
+	}
+	hud.setFocusable(Boolean(focus));
+	// setFocusable on macOS can reset the window's collection behavior flags,
+	// clearing visibleOnFullScreen. Re-assert so the HUD stays visible above
+	// fullscreen apps (e.g. a browser presenting a Canva slideshow).
+	hud.setVisibleOnAllWorkspaces(true, {
+		visibleOnFullScreen: true,
+		skipTransformProcessType: true,
+	});
+	if (focus) {
+		// macOS 14+ ignores a plain focus() while another app is active, so keys never arrive.
+		app.focus({ steal: true });
+		hud.focus();
+		hud.webContents.focus();
+		// Reset focusability when the HUD loses native focus (e.g. app switch).
+		hud.once("blur", () => hud.setFocusable(false));
+	}
+});
+
 ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) => {
 	loadHudOverlayCaptureProtectionSetting();
 	hudOverlayHiddenFromCapture = Boolean(enabled);
@@ -557,7 +589,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		hasShownHudWindow = true;
 		// Showing or changing native window state can recreate platform window
 		// flags. Reassert capture protection on both sides of the transition.
-		applyHudOverlayCaptureProtectionToWindow(win, hudOverlayHiddenFromCapture);
+		applyHudOverlayCaptureProtectionToWindow(win, getHudOverlayCaptureProtectionEnabled());
 		if (process.platform === "win32") {
 			// A focusable window is required for a Windows taskbar entry, but the
 			// always-on-top HUD must not steal focus when Recordly starts.
@@ -566,7 +598,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			win.show();
 		}
 		win.moveTop();
-		applyHudOverlayCaptureProtectionToWindow(win, hudOverlayHiddenFromCapture);
+		applyHudOverlayCaptureProtectionToWindow(win, getHudOverlayCaptureProtectionEnabled());
 		if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
 			win.setIgnoreMouseEvents(false);
 			setTimeout(() => {
@@ -577,10 +609,10 @@ export function createHudOverlayWindow(): BrowserWindow {
 		}
 	};
 
-	applyHudOverlayCaptureProtectionToWindow(win, hudOverlayHiddenFromCapture);
+	applyHudOverlayCaptureProtectionToWindow(win, getHudOverlayCaptureProtectionEnabled());
 	win.on("show", () => {
 		if (!win.isDestroyed()) {
-			applyHudOverlayCaptureProtectionToWindow(win, hudOverlayHiddenFromCapture);
+			applyHudOverlayCaptureProtectionToWindow(win, getHudOverlayCaptureProtectionEnabled());
 		}
 	});
 

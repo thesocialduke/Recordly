@@ -323,6 +323,7 @@ export function useExportRunner(input: ExportRunnerInput) {
 						sourceAudioFallbackStartDelayMsByPath:
 							audio.sourceAudioFallbackStartDelayMsByPath,
 						sourceAudioTrackSettings: sourceAudioTrackSettingsForExport,
+						webcamAudioTrack: audio.webcamAudioTrack,
 					};
 
 					const Exporter =

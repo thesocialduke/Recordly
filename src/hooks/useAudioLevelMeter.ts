@@ -8,6 +8,7 @@ export interface AudioLevelMeterOptions {
 
 export function useAudioLevelMeter(options: AudioLevelMeterOptions) {
 	const [level, setLevel] = useState(0);
+	const [error, setError] = useState(false);
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const analyserRef = useRef<AnalyserNode | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
@@ -33,12 +34,14 @@ export function useAudioLevelMeter(options: AudioLevelMeterOptions) {
 		if (!options.enabled) {
 			cleanup();
 			setLevel(0);
+			setError(false);
 			return cleanup;
 		}
 
 		let mounted = true;
 
 		const startMonitoring = async () => {
+			setError(false);
 			try {
 				const constraints: MediaStreamConstraints = {
 					audio: options.deviceId ? { deviceId: { exact: options.deviceId } } : true,
@@ -86,10 +89,11 @@ export function useAudioLevelMeter(options: AudioLevelMeterOptions) {
 				};
 
 				updateLevel();
-			} catch (error) {
-				console.error("Error starting audio level monitoring:", error);
+			} catch (meterError) {
+				console.error("Error starting audio level monitoring:", meterError);
 				if (mounted) {
 					setLevel(0);
+					setError(true);
 				}
 			}
 		};
@@ -102,5 +106,5 @@ export function useAudioLevelMeter(options: AudioLevelMeterOptions) {
 		};
 	}, [options.deviceId, options.enabled, options.smoothingFactor]);
 
-	return { level };
+	return { level, error };
 }

@@ -69,10 +69,29 @@ function omitTransientWebcamMediaFields(project: EditorProjectData | null) {
 	};
 }
 
+function hasWebcamOffsetEdit(
+	currentProjectSnapshot: EditorProjectData | null,
+	lastSavedSnapshot: EditorProjectData | null,
+): boolean {
+	const currentWebcam = currentProjectSnapshot?.editor?.webcam;
+	const savedWebcam = lastSavedSnapshot?.editor?.webcam;
+	// Session restores swap the source and offset together; the same source with a
+	// different offset can only be a user edit.
+	return Boolean(
+		currentWebcam?.sourcePath &&
+			currentWebcam.sourcePath === savedWebcam?.sourcePath &&
+			currentWebcam.timeOffsetMs !== savedWebcam.timeOffsetMs,
+	);
+}
+
 export function hasUnsavedProjectChanges(
 	currentProjectSnapshot: EditorProjectData | null,
 	lastSavedSnapshot: EditorProjectData | null,
 ): boolean {
+	if (hasWebcamOffsetEdit(currentProjectSnapshot, lastSavedSnapshot)) {
+		return true;
+	}
+
 	const comparableCurrentSnapshot = omitTransientWebcamMediaFields(currentProjectSnapshot);
 	const comparableLastSavedSnapshot = omitTransientWebcamMediaFields(lastSavedSnapshot);
 
