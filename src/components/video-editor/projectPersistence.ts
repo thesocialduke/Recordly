@@ -631,6 +631,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						trackIndex: isFiniteNumber(region.trackIndex)
 							? Math.max(0, Math.floor(region.trackIndex))
 							: 0,
+						...(isFiniteNumber(region.sourceOffsetMs)
+							? { sourceOffsetMs: Math.max(0, region.sourceOffsetMs) }
+							: {}),
 					};
 				})
 		: [];
@@ -1028,6 +1031,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			timeOffsetMs: isFiniteNumber(webcam.timeOffsetMs)
 				? Math.round(webcam.timeOffsetMs)
 				: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+			...(webcam.shape === "circle" ? { shape: "circle" as const } : {}),
 			...(typeof webcam.audioEnabled === "boolean"
 				? { audioEnabled: webcam.audioEnabled }
 				: {}),

@@ -1523,6 +1523,7 @@ export class ModernVideoExporter {
 			const requiresRenderedEditedTrack =
 				requiresClipTimelineRendering(this.config.clipRegions) ||
 				Boolean(this.config.webcamAudioTrack) ||
+				audioRegions.some((region) => region.sourceOffsetMs) ||
 				hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
 				(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted));
 			const strategy =

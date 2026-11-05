@@ -377,6 +377,7 @@ export default function VideoEditor() {
 		sessionNativeCaptureUnavailable,
 		setNativeCaptureUnavailableModalOpen,
 		webcamHasAudio: audio.webcamHasAudio,
+		onSeparateWebcamAudio: audio.separateWebcamAudio,
 		handleUploadWebcam,
 		handleClearWebcam,
 	});

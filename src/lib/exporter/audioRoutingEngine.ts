@@ -15,6 +15,7 @@ export interface ResolvedAudioTrack {
 	sourceRef: {
 		path: string;
 		startDelayMs: number;
+		sourceOffsetMs?: number;
 	};
 	gain: number;
 	timelineBinding: {
@@ -75,6 +76,7 @@ export function buildResolvedAudioPlan(input: {
 		sourceRef: {
 			path: region.audioPath,
 			startDelayMs: 0,
+			sourceOffsetMs: region.sourceOffsetMs ?? 0,
 		},
 		gain: clampGain(region.volume * (region.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1), 1),
 		timelineBinding: {

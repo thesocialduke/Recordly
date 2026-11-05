@@ -163,6 +163,7 @@ export interface WebcamOverlaySettings {
 	height: number;
 	reactToZoom: boolean;
 	roundness: number;
+	shape?: "rounded" | "circle";
 	/** Legacy pixel value retained only while loading older projects. */
 	cornerRadius?: number;
 	shadow: number;

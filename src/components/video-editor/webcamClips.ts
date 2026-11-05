@@ -99,6 +99,48 @@ export function splitWebcamClip(clips: WebcamClip[], atMs: number): WebcamClip[]
 	);
 }
 
+/** Turns footage clips into ordinary audio clips that keep playing the same sound. */
+export function getSeparatedWebcamAudioRegions(
+	clips: WebcamClip[],
+	sourcePath: string,
+	volume: number,
+	trackIndex: number,
+	createId: () => string,
+): AudioRegion[] {
+	return clips.map((clip) => ({
+		id: createId(),
+		startMs: clip.startMs,
+		endMs: clip.endMs,
+		audioPath: sourcePath,
+		volume,
+		trackIndex,
+		sourceOffsetMs: clip.sourceStartMs,
+	}));
+}
+
+/** Separated audio keeps its place in the file, so a left trim skips in rather than sliding. */
+export function getAudioRegionSpanPatch(
+	region: Pick<AudioRegion, "startMs" | "endMs" | "sourceOffsetMs">,
+	span: { start: number; end: number },
+): Pick<AudioRegion, "startMs" | "endMs" | "sourceOffsetMs"> {
+	let startMs = Math.round(span.start);
+	const endMs = Math.round(span.end);
+	if (
+		region.sourceOffsetMs === undefined ||
+		startMs === region.startMs ||
+		endMs - startMs === region.endMs - region.startMs
+	) {
+		return { startMs, endMs, sourceOffsetMs: region.sourceOffsetMs };
+	}
+
+	let sourceOffsetMs = region.sourceOffsetMs + startMs - region.startMs;
+	if (sourceOffsetMs < 0) {
+		startMs -= sourceOffsetMs;
+		sourceOffsetMs = 0;
+	}
+	return { startMs, endMs, sourceOffsetMs };
+}
+
 /** Webcam clips ride on the timeline's audio row machinery as their own track. */
 export function getWebcamClipTimelineRegions(
 	clips: WebcamClip[],
