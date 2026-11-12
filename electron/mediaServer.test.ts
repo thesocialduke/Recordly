@@ -63,6 +63,27 @@ describe("media server path policy", () => {
 		expect(isAllowedMediaPath(videoPath)).toBe(true);
 	});
 
+	it("serves an approved file only to links that carry the app's key", async () => {
+		const videoPath = path.join(tempRoot, "Downloads", "approved.mp4");
+		await fs.mkdir(path.dirname(videoPath), { recursive: true });
+		await fs.writeFile(videoPath, "test-video");
+		const { buildMediaUrl, ensureMediaServer } = await import("./mediaServer");
+		const { rememberApprovedLocalReadPath } = await import("./ipc/project/manager");
+		await rememberApprovedLocalReadPath(videoPath);
+		const realPath = await fs.realpath(videoPath);
+
+		const baseUrl = await ensureMediaServer();
+		const withKey = new URL(buildMediaUrl(baseUrl, realPath));
+		const withoutKey = new URL(withKey);
+		withoutKey.searchParams.delete("key");
+		const wrongKey = new URL(withKey);
+		wrongKey.searchParams.set("key", "x".repeat(withKey.searchParams.get("key")?.length ?? 1));
+
+		expect(await (await fetch(withKey)).text()).toBe("test-video");
+		expect((await fetch(withoutKey)).status).toBe(404);
+		expect((await fetch(wrongKey)).status).toBe(404);
+	});
+
 	it("rejects missing media files outside the allowed directories", async () => {
 		const missingPath = path.join(tempRoot, "Downloads", "missing.mp4");
 		const { isAllowedMediaPath } = await import("./mediaServer");

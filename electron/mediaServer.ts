@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -7,6 +8,16 @@ import { getMediaContentType } from "./mediaTypes";
 
 let mediaServerBaseUrl: string | null = null;
 let mediaServerStartPromise: Promise<string> | null = null;
+// Anything on this Mac can reach a loopback port, so links carry a secret only
+// this app knows. Without it the server answers as if nothing were there.
+const mediaServerKey = randomBytes(24).toString("base64url");
+
+export function isValidMediaKey(key: string | null): boolean {
+	if (!key) return false;
+	const given = Buffer.from(key);
+	const expected = Buffer.from(mediaServerKey);
+	return given.length === expected.length && timingSafeEqual(given, expected);
+}
 
 export function resolveHttpByteRange(
 	rangeHeader: string,
@@ -69,7 +80,7 @@ async function handleMediaRequest(
 	try {
 		const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
-		if (url.pathname !== "/video") {
+		if (url.pathname !== "/video" || !isValidMediaKey(url.searchParams.get("key"))) {
 			response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
 			response.end("Not Found");
 			return;
@@ -233,5 +244,5 @@ export async function ensureMediaServer(): Promise<string> {
 
 export function buildMediaUrl(baseUrl: string, filePath: string): string {
 	const resolved = path.resolve(filePath);
-	return `${baseUrl}/video?path=${encodeURIComponent(resolved)}`;
+	return `${baseUrl}/video?path=${encodeURIComponent(resolved)}&key=${mediaServerKey}`;
 }
