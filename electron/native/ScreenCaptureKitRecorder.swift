@@ -273,6 +273,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var isPaused = false
 	private var pauseStartedHostTime: CMTime?
 	private var pendingResumeAdjustment = false
+	private var resumeHostTime: CMTime?
 	private var accumulatedPausedDuration: CMTime = .zero
 	private var sessionStarted = false
 	private var frameCount = 0
@@ -587,6 +588,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		isRecording = true
 		isPaused = false
 		pauseStartedHostTime = nil
+		resumeHostTime = nil
 		pendingResumeAdjustment = false
 		accumulatedPausedDuration = .zero
 		frameCount = 0
@@ -624,6 +626,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					return
 				}
 				self.isPaused = false
+				self.resumeHostTime = CMClockGetTime(CMClockGetHostTimeClock())
 				self.pendingResumeAdjustment = true
 				continuation.resume(returning: true)
 			}
@@ -956,6 +959,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		frameCount = 0
 		isPaused = false
 		pauseStartedHostTime = nil
+		resumeHostTime = nil
 		pendingResumeAdjustment = false
 		accumulatedPausedDuration = .zero
 		capturesSystemAudio = false
@@ -1011,18 +1015,22 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		let sampleTime = sampleBuffer.presentationTimeStamp
 		if pendingResumeAdjustment {
-			// Audio and video callbacks share this queue but their timestamps can be
-			// offset slightly. Anchor the post-countdown adjustment to video and drop
-			// audio until that anchor exists; otherwise the first audio callback can
-			// make the following video timestamp move backwards and fail the writer.
-			guard outputType == .screen, let pauseStartedHostTime else {
+			guard let pauseStartedHostTime, let resumeHostTime else {
 				return nil
 			}
-			let pauseGap = sampleTime - pauseStartedHostTime
+			// Anything captured before resume belongs to the pause.
+			if sampleTime < resumeHostTime {
+				return nil
+			}
+			// The pause ends at resume, not at the next delivered frame. A still screen
+			// sends no complete frames, so measuring to the next frame cut seconds of
+			// real time and put every cursor sample that far behind the video.
+			let pauseGap = resumeHostTime - pauseStartedHostTime
 			if pauseGap > .zero {
 				accumulatedPausedDuration = accumulatedPausedDuration + pauseGap
 			}
 			self.pauseStartedHostTime = nil
+			self.resumeHostTime = nil
 			pendingResumeAdjustment = false
 		}
 

@@ -1878,7 +1878,7 @@ export function registerRecordingHandlers(
 		}
 	});
 
-	ipcMain.handle("set-recording-state", (_, recording: boolean) => {
+	ipcMain.handle("set-recording-state", (_, recording: boolean, startedAtMs?: number) => {
 		if (recording) {
 			stopCursorCapture();
 			stopInteractionCapture();
@@ -1887,7 +1887,17 @@ export function registerRecordingHandlers(
 			setIsCursorCaptureActive(true);
 			setActiveCursorSamples([]);
 			setPendingCursorSamples([]);
-			setCursorCaptureStartTimeMs(Date.now());
+			// Microphone setup runs between the video starting and this call, so
+			// starting the cursor clock here would put the cursor behind the video.
+			const now = Date.now();
+			setCursorCaptureStartTimeMs(
+				typeof startedAtMs === "number" &&
+					Number.isFinite(startedAtMs) &&
+					startedAtMs <= now &&
+					now - startedAtMs < 10_000
+					? startedAtMs
+					: now,
+			);
 			resetCursorCaptureClock();
 			setLinuxCursorScreenPoint(null);
 			setLastLeftClick(null);
