@@ -171,8 +171,11 @@ export function useProjectLifecycle(input: Input) {
 		timeline.setZoomRegions(editor.zoomRegions);
 		timeline.setTrimRegions(editor.trimRegions);
 		timeline.setClipRegions(editor.clipRegions);
-		// An explicit empty clip list means the user deleted all footage, not a legacy project.
-		refs.clipInitializedRef.current = Array.isArray(persistedEditor.clipRegions);
+		// A saved project with no clips (for example one autosaved after undo emptied the
+		// timeline) would otherwise open with nothing on the timeline and no way back.
+		// Rebuild the full-length clip for it, the same as for a fresh recording.
+		refs.clipInitializedRef.current =
+			Array.isArray(persistedEditor.clipRegions) && persistedEditor.clipRegions.length > 0;
 		refs.autoFullTrackClipIdRef.current = null;
 		refs.autoFullTrackClipEndMsRef.current = null;
 		timeline.setSpeedRegions(editor.speedRegions);
