@@ -42,6 +42,9 @@ export function resolveWebcamAudioTrack(
 }
 
 /** Recorded webcam files are video-only, so sound is only offered when the file has some. */
+const WEBCAM_PROBE_RETRIES = 6;
+const WEBCAM_PROBE_RETRY_DELAY_MS = 500;
+
 export function useWebcamMediaInfo(sourcePath: string | null) {
 	const [probe, setProbe] = useState<{
 		path: string;
@@ -57,7 +60,21 @@ export function useWebcamMediaInfo(sourcePath: string | null) {
 		let cancelled = false;
 		void (async () => {
 			try {
-				const result = await window.electronAPI?.probeNativeVideoMetadata?.(sourcePath);
+				// Opening a project approves its webcam file for reading slightly after the
+				// editor first asks about it, so an early probe can be refused. Retry briefly
+				// instead of deciding the footage has no audio for the rest of the session.
+				let result = await window.electronAPI?.probeNativeVideoMetadata?.(sourcePath);
+				for (
+					let attempt = 0;
+					attempt < WEBCAM_PROBE_RETRIES && !result?.success;
+					attempt++
+				) {
+					await new Promise((resolve) =>
+						setTimeout(resolve, WEBCAM_PROBE_RETRY_DELAY_MS),
+					);
+					if (cancelled) return;
+					result = await window.electronAPI?.probeNativeVideoMetadata?.(sourcePath);
+				}
 				if (!cancelled) {
 					setProbe({
 						path: sourcePath,

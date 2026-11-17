@@ -199,3 +199,81 @@ describe("source preview playback ownership", () => {
 		}
 	});
 });
+
+describe("timeline audio track loading", () => {
+	it("keeps the file it loaded when a rerender cancels the effect first", async () => {
+		const created: { src: string; volume: number }[] = [];
+		vi.stubGlobal("Audio", function () {
+			const audio = {
+				src: "",
+				dataset: {},
+				preload: "",
+				volume: 1,
+				currentTime: 0,
+				paused: true,
+				load: vi.fn(),
+				pause: vi.fn(),
+				play: vi.fn(() => Promise.resolve()),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			};
+			created.push(audio);
+			return audio;
+		});
+		vi.stubGlobal(
+			"AudioContext",
+			class {
+				state = "running";
+				destination = {};
+				createGain() {
+					return { gain: { value: 1 }, connect: vi.fn() };
+				}
+			},
+		);
+		const params = {
+			audioRegions: [
+				{
+					id: "audio-1",
+					startMs: 0,
+					endMs: 5000,
+					audioPath: "/webcam.mov",
+					volume: 1,
+					trackIndex: 0,
+					sourceOffsetMs: 0,
+				},
+			],
+			previewVolume: 1,
+			isPlaying: false,
+			currentTime: 0,
+			timelineTime: 0,
+			duration: 10,
+			sourcePlaybackRate: 1,
+			previewSourceAudioFallbackPaths: [],
+			sourceAudioFallbackStartDelayMsByPath: {},
+			sourceAudioResourceVersion: 0,
+			isCurrentClipMuted: false,
+			getSourceTrackPreviewGain: () => 1,
+			onSourceFallbackLoadError: vi.fn(),
+		};
+		const render = () => {
+			harness.effects = [];
+			harness.index = 0;
+			useAudioPreviewSync(params);
+			return harness.effects.map((effect) => effect());
+		};
+
+		// The first pass starts loading the file; a rerender (volume, playback) runs the
+		// effect cleanup before the load finishes, then the effect again.
+		// Only the track-loading effect (the hook's first) reruns; the others stay mounted.
+		const [trackLoadingCleanup] = render();
+		if (typeof trackLoadingCleanup === "function") trackLoadingCleanup();
+		harness.effects = [];
+		harness.index = 0;
+		useAudioPreviewSync(params);
+		harness.effects[0]?.();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(created).toHaveLength(1);
+		expect(created[0].src).toBe("file:///audio.wav");
+	});
+});

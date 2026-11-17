@@ -115,7 +115,6 @@ export function useAudioPreviewSync({
 	}, [ensureSourceAudioRunning]);
 
 	useEffect(() => {
-		let cancelled = false;
 		const existing = audioElementsRef.current;
 		const currentIds = new Set(resolvedUserTracks.map((track) => track.id));
 
@@ -145,12 +144,14 @@ export function useAudioPreviewSync({
 				audioElementRevokersRef.current.delete(track.id);
 				audioElementResourcesRef.current.set(track.id, track.sourceRef.path);
 
+				// Resource identity, not effect lifetime, decides staleness. A rerender (volume,
+				// playback) cancels the effect but skips reloading this path, so dropping the
+				// result here left the track with no source and the audio silent.
 				void (async () => {
 					const resolved = await resolveMediaElementSource(track.sourceRef.path);
 					const latestAudio = existing.get(track.id);
 
 					if (
-						cancelled ||
 						latestAudio !== audio ||
 						audioElementResourcesRef.current.get(track.id) !== track.sourceRef.path
 					) {
@@ -165,10 +166,6 @@ export function useAudioPreviewSync({
 
 			audio.volume = Math.max(0, Math.min(1, track.gain * previewVolume));
 		}
-
-		return () => {
-			cancelled = true;
-		};
 	}, [previewVolume, resolvedUserTracks]);
 
 	useEffect(() => {
