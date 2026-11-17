@@ -55,6 +55,7 @@ type Input = {
 	pendingFreshRecordingAutoSuggestTelemetryCountRef: MutableRefObject<number>;
 	handleUndo: () => void;
 	handleRedo: () => void;
+	markAutomaticHistoryChange?: () => void;
 };
 
 export function useTimelineEditingController(input: Input) {
@@ -82,6 +83,7 @@ export function useTimelineEditingController(input: Input) {
 		initializedRef: input.clipInitializedRef,
 		autoFullTrackIdRef: input.autoFullTrackClipIdRef,
 		autoFullTrackEndRef: input.autoFullTrackClipEndMsRef,
+		markAutomaticChange: input.markAutomaticHistoryChange,
 	});
 	const audio = useVideoEditorAudio({
 		currentSourcePath: input.currentSourcePath,

@@ -25,6 +25,8 @@ type Input = {
 	initializedRef: MutableRefObject<boolean>;
 	autoFullTrackIdRef: MutableRefObject<string | null>;
 	autoFullTrackEndRef: MutableRefObject<number | null>;
+	/** Tells undo history that the next timeline change was made by the app, not the user. */
+	markAutomaticChange?: () => void;
 };
 
 export function useTimelineProjection({
@@ -35,6 +37,7 @@ export function useTimelineProjection({
 	initializedRef,
 	autoFullTrackIdRef,
 	autoFullTrackEndRef,
+	markAutomaticChange,
 }: Input) {
 	const { clipRegions, trimRegions, speedRegions, zoomRegions, autoCaptions } = timeline;
 
@@ -59,6 +62,7 @@ export function useTimelineProjection({
 					);
 				}
 				const sequence = closeClipGaps(nextRegions);
+				markAutomaticChange?.();
 				timeline.setClipRegions(sequence);
 				if (trimRegions.length > 0) {
 					timeline.setZoomRegions((current) =>
@@ -84,6 +88,7 @@ export function useTimelineProjection({
 		);
 		if (!extended) return;
 		autoFullTrackEndRef.current = totalMs;
+		markAutomaticChange?.();
 		timeline.setClipRegions(extended);
 	}, [duration, clipRegions, trimRegions, nextClipIdRef, timeline.setClipRegions]);
 

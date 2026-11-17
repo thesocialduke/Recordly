@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { getProjectBackupPath, writeProjectFileAtomically } from "./atomicSave";
+import {
+	getProjectBackupPath,
+	getProjectVersionHistoryDir,
+	writeProjectFileAtomically,
+} from "./atomicSave";
 
 describe("writeProjectFileAtomically", () => {
 	let tempDir: string;
@@ -110,3 +114,56 @@ describe("writeProjectFileAtomically", () => {
 		},
 	);
 });
+
+describe("project version history", () => {
+	let tempDir: string;
+	let projectPath: string;
+	const project = (clips: number) =>
+		JSON.stringify({
+			version: 2,
+			editor: { clipRegions: Array.from({ length: clips }, (_, i) => ({ id: `clip-${i}` })) },
+		});
+
+	beforeEach(async () => {
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "recordly-version-history-"));
+		projectPath = path.join(tempDir, "demo.recordly");
+	});
+
+	afterEach(async () => {
+		await fs.rm(tempDir, { recursive: true, force: true });
+	});
+
+	const listVersions = async () => {
+		try {
+			return await fs.readdir(getProjectVersionHistoryDir(projectPath));
+		} catch {
+			return [];
+		}
+	};
+
+	it("keeps the clips even when rapid autosaves blank the timeline", async () => {
+		await writeProjectFileAtomically(projectPath, project(5));
+		await writeProjectFileAtomically(projectPath, project(6));
+		await writeProjectFileAtomically(projectPath, project(7));
+		await writeProjectFileAtomically(projectPath, project(0));
+		await writeProjectFileAtomically(projectPath, project(0).replace("2", "2 "));
+
+		const versions = await listVersions();
+		const contents = await Promise.all(
+			versions.map((name) =>
+				fs.readFile(path.join(getProjectVersionHistoryDir(projectPath), name), "utf-8"),
+			),
+		);
+		// One copy for the first overwrite, then one when the save dropped all clips.
+		expect(contents).toContain(project(5));
+		expect(contents).toContain(project(7));
+		expect(contents).toHaveLength(2);
+	});
+
+	it("does not keep a copy for a brand new project or an unchanged save", async () => {
+		await writeProjectFileAtomically(projectPath, project(1));
+		await writeProjectFileAtomically(projectPath, project(1));
+		expect(await listVersions()).toEqual([]);
+	});
+});
+

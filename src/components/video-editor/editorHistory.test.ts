@@ -125,4 +125,29 @@ describe("editorHistory", () => {
 		expect(snapshot.selectedZoomId).toBe("first");
 		expect(areEditorHistorySnapshotsEqual(snapshot, createSnapshot("first"))).toBe(true);
 	});
+
+	it("never undoes back to the empty timeline from before the first clip existed", () => {
+		const stack = createEditorHistoryStack();
+		const empty = createSnapshot(null);
+		const firstClip = {
+			...createSnapshot(null),
+			clipRegions: [{ id: "clip-1", startMs: 0, endMs: 5000, speed: 1 }],
+		} as EditorHistorySnapshot;
+		const split = {
+			...firstClip,
+			clipRegions: [
+				{ id: "clip-1", startMs: 0, endMs: 2000, speed: 1 },
+				{ id: "clip-2", startMs: 2000, endMs: 5000, speed: 1 },
+			],
+		} as EditorHistorySnapshot;
+
+		recordEditorHistorySnapshot(stack, empty);
+		recordEditorHistorySnapshot(stack, firstClip);
+		recordEditorHistorySnapshot(stack, split);
+
+		expect(undoEditorHistoryStack(stack, split)).toEqual(firstClip);
+		expect(undoEditorHistoryStack(stack, firstClip)).toBeNull();
+		expect(stack.past).toEqual([]);
+		expect(redoEditorHistoryStack(stack, firstClip)).toEqual(split);
+	});
 });

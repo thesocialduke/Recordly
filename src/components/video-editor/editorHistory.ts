@@ -129,6 +129,14 @@ export function undoEditorHistoryStack(
 	}
 
 	const current = stack.current ?? cloneEditorHistorySnapshot(fallbackCurrent);
+	// An empty clip list only exists for a moment while a project is loading, before
+	// the first clip is created. Never undo back into that state: it blanks the
+	// timeline, and autosave would then write the blank timeline over the project.
+	if (current.clipRegions.length > 0) {
+		while (stack.past.length > 0 && stack.past[stack.past.length - 1].clipRegions.length === 0) {
+			stack.past.pop();
+		}
+	}
 	const previous = stack.past.pop();
 	if (!previous) {
 		return null;

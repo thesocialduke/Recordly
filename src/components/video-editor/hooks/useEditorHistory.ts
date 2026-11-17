@@ -142,10 +142,8 @@ export function useEditorHistory({
 	);
 	const handleUndo = useCallback(() => {
 		const previous = undoEditorHistoryStack(historyRef.current, buildSnapshot());
-		if (previous) {
-			applySnapshot(previous);
-			syncButtons();
-		}
+		if (previous) applySnapshot(previous);
+		syncButtons();
 	}, [applySnapshot, buildSnapshot, syncButtons]);
 	const handleRedo = useCallback(() => {
 		const next = redoEditorHistoryStack(historyRef.current, buildSnapshot());
@@ -154,6 +152,13 @@ export function useEditorHistory({
 			syncButtons();
 		}
 	}, [applySnapshot, buildSnapshot, syncButtons]);
+	// Changes the app makes on its own (such as creating the first full-length clip
+	// once the video duration is known) replace the current history entry instead of
+	// becoming an undo step. Otherwise undo could step back to an empty timeline and
+	// the automatic change that follows would wipe the redo history.
+	const markAutomaticChange = useCallback(() => {
+		applyingRef.current = true;
+	}, []);
 	const resetHistory = useCallback(() => {
 		resetEditorHistoryStack(historyRef.current);
 		applyingRef.current = false;
@@ -172,6 +177,7 @@ export function useEditorHistory({
 		...historyFlags,
 		handleUndo,
 		handleRedo,
+		markAutomaticChange,
 		resetHistory,
 	};
 }

@@ -265,7 +265,7 @@ export default function VideoEditor() {
 	});
 	const {
 		snapshot: { currentSourcePath },
-		history: { handleUndo, handleRedo },
+		history: { handleUndo, handleRedo, markAutomaticChange },
 		lifecycle: { attachWebcamFootage, handleUploadWebcam, handleClearWebcam },
 		autoCaption: autoCaptionController,
 	} = projectController;
@@ -304,6 +304,7 @@ export default function VideoEditor() {
 		pendingFreshRecordingAutoSuggestTelemetryCountRef,
 		handleUndo,
 		handleRedo,
+		markAutomaticHistoryChange: markAutomaticChange,
 	});
 	const {
 		cursor: { effectiveCursorTelemetry },
