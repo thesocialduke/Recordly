@@ -31,7 +31,13 @@ export function listRecordings(includeSources = false): Promise<RecordingLibrary
 		}
 		const result: RecordingLibraryEntry[] = [];
 		for (const entry of entries) {
-			if (!entry.isFile() || !(includeSources ? /\.(mp4|mov|webm|mkv|m4v|wav|m4a|mp3|ogg|flac)$/i.test(entry.name) : isRecording(entry.name))) continue;
+			if (
+				!entry.isFile() ||
+				!(includeSources
+					? /\.(mp4|mov|webm|mkv|m4v|wav|m4a|mp3|ogg|flac)$/i.test(entry.name)
+					: isRecording(entry.name))
+			)
+				continue;
 			const filePath = path.join(root, entry.name);
 			const stat = await fs.stat(filePath);
 			if (!stat.size) continue;
@@ -173,4 +179,45 @@ export function clearRecordingTrashUndo() {
 	const task = mutation.then(finishPendingTrash);
 	mutation = task.catch(() => undefined);
 	return task;
+}
+
+const COPYABLE_VIDEO = /\.(mp4|mov|webm|mkv|m4v)$/i;
+
+/**
+ * Brings videos picked from anywhere on disk into the recordings folder so they can be
+ * added to the timeline like any recording. Files already in the folder are used as is,
+ * and a copy never overwrites an existing file.
+ */
+export async function copyVideosIntoRecordings(sourcePaths: string[]): Promise<string[]> {
+	const root = await fs.realpath(await getRecordingsDir());
+	const added: string[] = [];
+	for (const sourcePath of sourcePaths) {
+		if (typeof sourcePath !== "string" || !COPYABLE_VIDEO.test(sourcePath)) continue;
+		const realSource = await fs.realpath(sourcePath);
+		if (!(await fs.stat(realSource)).isFile()) continue;
+		if (path.dirname(realSource) === root && isRecording(path.basename(realSource))) {
+			added.push(realSource);
+			continue;
+		}
+		const extension = path.extname(realSource);
+		// Names containing "-webcam." are treated as webcam sidecars and hidden from the list.
+		const stem =
+			path
+				.basename(realSource, extension)
+				.replace(/[.-]webcam(?=[.-]|$)/gi, " camera")
+				.trim() || "video";
+		let target = path.join(root, `${stem}${extension}`);
+		for (let attempt = 2; ; attempt++) {
+			try {
+				await fs.copyFile(realSource, target, constants.COPYFILE_EXCL);
+				break;
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+				target = path.join(root, `${stem} ${attempt}${extension}`);
+			}
+		}
+		await rememberApprovedLocalReadPath(target);
+		added.push(target);
+	}
+	return added;
 }

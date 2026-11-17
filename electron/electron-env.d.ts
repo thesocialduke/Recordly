@@ -797,6 +797,10 @@ interface Window {
 				import("../src/types/projectPreview").ProjectPreviewData
 			>
 		>;
+		/** Lets the user pick videos from anywhere, copied into the recordings folder. */
+		pickVideosForTimeline: () => Promise<
+			import("../src/types/recordingLibrary").LibraryResult<string[]>
+		>;
 		listRecordings: (
 			includeSources?: boolean,
 		) => Promise<

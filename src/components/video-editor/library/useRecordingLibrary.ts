@@ -241,6 +241,20 @@ export function useRecordingLibrary(
 			setCancelling(false);
 		}
 	};
+	/** Pick videos from anywhere (Desktop, Downloads...) and add them after the last clip. */
+	const addFromFiles = async () => {
+		if (lock.current) return;
+		try {
+			const result = await window.electronAPI.pickVideosForTimeline();
+			if (!result.success) throw new Error(result.error);
+			if (!result.value.length) return;
+			await refresh();
+			await addToTimeline(result.value);
+		} catch (error) {
+			toast.error(`Could not add video: ${String(error)}`);
+		}
+	};
+
 	return {
 		open,
 		setOpen,
@@ -258,5 +272,6 @@ export function useRecordingLibrary(
 		cancelling,
 		cancelImport,
 		addToTimeline,
+		addFromFiles,
 	};
 }

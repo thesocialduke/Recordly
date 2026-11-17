@@ -48,6 +48,8 @@ type Props = {
 	previewAspectRatioValue: number;
 	videoPlaybackRef: RefObject<VideoPlaybackRef | null>;
 	timelineRef: RefObject<TimelineEditorHandle | null>;
+	/** Opens a file picker and adds the chosen screen recordings after the last clip. */
+	onAddScreenRecording?: () => void;
 	currentTime: number;
 	isPlaying: boolean;
 	previewVolume: number;
@@ -91,6 +93,7 @@ export function EditorPreviewPanel(props: Props) {
 		previewAspectRatioValue,
 		videoPlaybackRef,
 		timelineRef,
+		onAddScreenRecording,
 		currentTime,
 		isPlaying,
 		previewVolume,
@@ -237,6 +240,14 @@ export function EditorPreviewPanel(props: Props) {
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start">
+							{onAddScreenRecording && (
+								<DropdownMenuItem
+									onClick={onAddScreenRecording}
+									className="cursor-pointer text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+								>
+									Screen recording…
+								</DropdownMenuItem>
+							)}
 							<DropdownMenuItem
 								onClick={() => {
 									const nextTrack =

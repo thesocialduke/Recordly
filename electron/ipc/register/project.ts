@@ -3,7 +3,11 @@ import { renameLibraryProject } from "../project/renameLibraryProject";
 import { createUntitledProject } from "../project/createUntitledProject";
 import { trashLibraryProjects } from "../project/trashProjects";
 import { getRecordingThumbnail } from "../recording/thumbnail";
-import { listRecordings, setRecordingsRemoved } from "../recording/library";
+import {
+	copyVideosIntoRecordings,
+	listRecordings,
+	setRecordingsRemoved,
+} from "../recording/library";
 import { importRecording, discardRecordingImport } from "../recording/importRecording";
 import { randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
@@ -284,6 +288,21 @@ export function registerProjectHandlers() {
 	ipcMain.handle("get-project-preview", async (_, projectPath: string) => {
 		try {
 			return { success: true, value: await readProjectPreview(projectPath) };
+		} catch (error) {
+			return { success: false, error: String(error) };
+		}
+	});
+	ipcMain.handle("pick-videos-for-timeline", async () => {
+		try {
+			const result = await dialog.showOpenDialog({
+				title: "Add Screen Recordings to the Timeline",
+				filters: [{ name: "Videos", extensions: ["mp4", "mov", "webm", "mkv", "m4v"] }],
+				properties: ["openFile", "multiSelections"],
+			});
+			if (result.canceled || result.filePaths.length === 0) {
+				return { success: true, value: [] };
+			}
+			return { success: true, value: await copyVideosIntoRecordings(result.filePaths) };
 		} catch (error) {
 			return { success: false, error: String(error) };
 		}

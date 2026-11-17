@@ -75,6 +75,17 @@ export function RecordingLibraryPanel({
 		>
 			<header className="flex min-h-14 shrink-0 items-center gap-2 px-5 py-3">
 				<h2 className="flex-1 text-[14px] font-semibold">Clips</h2>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="h-7 gap-1.5 px-2 text-xs"
+					disabled={library.busy || library.importing}
+					onClick={() => void library.addFromFiles()}
+					title="Add a screen recording from any folder to the timeline"
+				>
+					<Plus className="size-3.5" />
+					Add video
+				</Button>
 				<Dropdown>
 					<HeroButton
 						isIconOnly

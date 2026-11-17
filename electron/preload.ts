@@ -839,6 +839,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	cancelRecordingImport: () => ipcRenderer.invoke("cancel-recording-import"),
 	getProjectPreview: (projectPath: string) =>
 		ipcRenderer.invoke("get-project-preview", projectPath),
+	pickVideosForTimeline: () => ipcRenderer.invoke("pick-videos-for-timeline"),
 	listRecordings: (includeSources?: boolean) =>
 		ipcRenderer.invoke("list-recordings", includeSources),
 	setRecordingsRemoved: (paths: string[], removed: boolean) =>

@@ -46,7 +46,12 @@ vi.mock("../ffmpeg/binary", async () => {
 		getFfprobeBinaryPath: () => require("ffprobe-static").path,
 	};
 });
-import { listRecordings, setRecordingsRemoved, clearRecordingTrashUndo } from "./library";
+import {
+	clearRecordingTrashUndo,
+	copyVideosIntoRecordings,
+	listRecordings,
+	setRecordingsRemoved,
+} from "./library";
 import { importRecording, discardRecordingImport } from "./importRecording";
 import { getRecordingThumbnail } from "./thumbnail";
 import { getCompanionAudioFallbackInfo } from "./diagnostics";
@@ -329,9 +334,39 @@ it("restores on volumes without hard links and preserves conflicts", async () =>
 });
 
 it("Raw includes camera and audio sources without including metadata or symlinks", async () => {
- const files = ["screen.mp4", "screen.webcam.mp4", "screen.mic.wav", "screen.system.m4a"];
- for (const name of [...files, "screen.cursor.json"]) await fs.writeFile(path.join(state.root, name), "fixture");
- await fs.symlink(path.join(state.root, "screen.mp4"), path.join(state.root, "linked.mp4"));
- expect((await listRecordings(true)).map(entry => entry.name).sort()).toEqual(files.sort());
- expect((await listRecordings()).map(entry => entry.name)).toEqual(["screen.mp4"]);
+	const files = ["screen.mp4", "screen.webcam.mp4", "screen.mic.wav", "screen.system.m4a"];
+	for (const name of [...files, "screen.cursor.json"])
+		await fs.writeFile(path.join(state.root, name), "fixture");
+	await fs.symlink(path.join(state.root, "screen.mp4"), path.join(state.root, "linked.mp4"));
+	expect((await listRecordings(true)).map((entry) => entry.name).sort()).toEqual(files.sort());
+	expect((await listRecordings()).map((entry) => entry.name)).toEqual(["screen.mp4"]);
+});
+
+it("copies videos picked from other folders into the recordings list without overwriting", async () => {
+	const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "recordly-pick-")));
+	try {
+		const desktop = path.join(outside, "Screen Recording 2026-11-05.mov");
+		const camera = path.join(outside, "demo-webcam.mp4");
+		const notes = path.join(outside, "notes.txt");
+		const inside = path.join(state.root, "recording-1.mp4");
+		for (const file of [desktop, camera, notes, inside]) await fs.writeFile(file, "fixture");
+		await fs.writeFile(path.join(state.root, "Screen Recording 2026-11-05.mov"), "existing");
+
+		const added = await copyVideosIntoRecordings([desktop, camera, notes, inside]);
+
+		expect(added).toEqual([
+			path.join(state.root, "Screen Recording 2026-11-05 2.mov"),
+			path.join(state.root, "demo camera.mp4"),
+			inside,
+		]);
+		await expect(
+			fs.readFile(path.join(state.root, "Screen Recording 2026-11-05.mov"), "utf-8"),
+		).resolves.toBe("existing");
+		await expect(fs.readFile(desktop, "utf-8")).resolves.toBe("fixture");
+		const listed = (await listRecordings()).map((entry) => entry.path);
+		for (const file of added) expect(listed).toContain(file);
+		for (const file of added) expect(state.approved.has(file) || file === inside).toBe(true);
+	} finally {
+		await fs.rm(outside, { recursive: true, force: true });
+	}
 });

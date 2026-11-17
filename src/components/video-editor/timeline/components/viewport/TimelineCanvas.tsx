@@ -16,6 +16,7 @@ import type {
 	SourceAudioTrackWithPeaks,
 } from "@/components/video-editor/audio/audioTypes";
 import { cn } from "@/lib/utils";
+import { WEBCAM_TIMELINE_TRACK_INDEX } from "../../../webcamClips";
 import {
 	CAPTION_ROW_ID,
 	CLIP_ROW_ID,
@@ -523,62 +524,76 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 		range: { start: rangeStart },
 	} = useTimelineContext();
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
-	const { clipItems, zoomItems, captionItems, annotationRows, audioRows } = useMemo(() => {
-		const nextClipItems: TimelineRenderItem[] = [];
-		const nextZoomItems: TimelineRenderItem[] = [];
-		const nextCaptionItems: TimelineRenderItem[] = [];
-		const annotationBuckets = new Map<number, TimelineRenderItem[]>();
-		const audioBuckets = new Map<number, TimelineRenderItem[]>();
+	const { clipItems, zoomItems, captionItems, annotationRows, audioRows, webcamRows } =
+		useMemo(() => {
+			const nextClipItems: TimelineRenderItem[] = [];
+			const nextZoomItems: TimelineRenderItem[] = [];
+			const nextCaptionItems: TimelineRenderItem[] = [];
+			const annotationBuckets = new Map<number, TimelineRenderItem[]>();
+			const audioBuckets = new Map<number, TimelineRenderItem[]>();
 
-		for (const item of items) {
-			if (item.rowId === CLIP_ROW_ID) {
-				nextClipItems.push(item);
-				continue;
+			for (const item of items) {
+				if (item.rowId === CLIP_ROW_ID) {
+					nextClipItems.push(item);
+					continue;
+				}
+				if (item.rowId === ZOOM_ROW_ID) {
+					nextZoomItems.push(item);
+					continue;
+				}
+				if (item.rowId === CAPTION_ROW_ID) {
+					nextCaptionItems.push(item);
+					continue;
+				}
+				if (isAnnotationTrackRowId(item.rowId)) {
+					const trackIndex = getAnnotationTrackIndex(item.rowId);
+					const bucket = annotationBuckets.get(trackIndex);
+					if (bucket) bucket.push(item);
+					else annotationBuckets.set(trackIndex, [item]);
+					continue;
+				}
+				if (isAudioTrackRowId(item.rowId)) {
+					const trackIndex = getAudioTrackIndex(item.rowId);
+					const bucket = audioBuckets.get(trackIndex);
+					if (bucket) bucket.push(item);
+					else audioBuckets.set(trackIndex, [item]);
+				}
 			}
-			if (item.rowId === ZOOM_ROW_ID) {
-				nextZoomItems.push(item);
-				continue;
-			}
-			if (item.rowId === CAPTION_ROW_ID) {
-				nextCaptionItems.push(item);
-				continue;
-			}
-			if (isAnnotationTrackRowId(item.rowId)) {
-				const trackIndex = getAnnotationTrackIndex(item.rowId);
-				const bucket = annotationBuckets.get(trackIndex);
-				if (bucket) bucket.push(item);
-				else annotationBuckets.set(trackIndex, [item]);
-				continue;
-			}
-			if (isAudioTrackRowId(item.rowId)) {
-				const trackIndex = getAudioTrackIndex(item.rowId);
-				const bucket = audioBuckets.get(trackIndex);
-				if (bucket) bucket.push(item);
-				else audioBuckets.set(trackIndex, [item]);
-			}
-		}
 
-		const annotationRowsSorted = Array.from(annotationBuckets.entries())
-			.sort(([left], [right]) => left - right)
-			.map(([trackIndex, rowItems]) => ({
-				rowId: getAnnotationTrackRowId(trackIndex),
-				items: rowItems,
-			}));
-		const audioRowsSorted = Array.from(audioBuckets.entries())
-			.sort(([left], [right]) => left - right)
-			.map(([trackIndex, rowItems]) => ({
-				rowId: getAudioTrackRowId(trackIndex),
-				items: rowItems,
-			}));
+			const annotationRowsSorted = Array.from(annotationBuckets.entries())
+				.sort(([left], [right]) => left - right)
+				.map(([trackIndex, rowItems]) => ({
+					rowId: getAnnotationTrackRowId(trackIndex),
+					items: rowItems,
+				}));
+			// The webcam footage row sits right under the screen clips instead of after every
+			// audio row, so it is always on screen and easy to trim, split and move.
+			const audioRowsSorted = Array.from(audioBuckets.entries())
+				.filter(([trackIndex]) => trackIndex !== WEBCAM_TIMELINE_TRACK_INDEX)
+				.sort(([left], [right]) => left - right)
+				.map(([trackIndex, rowItems]) => ({
+					rowId: getAudioTrackRowId(trackIndex),
+					items: rowItems,
+				}));
+			const webcamRowItems = audioBuckets.get(WEBCAM_TIMELINE_TRACK_INDEX);
+			const webcamRowsSorted = webcamRowItems
+				? [
+						{
+							rowId: getAudioTrackRowId(WEBCAM_TIMELINE_TRACK_INDEX),
+							items: webcamRowItems,
+						},
+					]
+				: [];
 
-		return {
-			clipItems: nextClipItems,
-			zoomItems: nextZoomItems,
-			captionItems: nextCaptionItems,
-			annotationRows: annotationRowsSorted,
-			audioRows: audioRowsSorted,
-		};
-	}, [items]);
+			return {
+				clipItems: nextClipItems,
+				zoomItems: nextZoomItems,
+				captionItems: nextCaptionItems,
+				annotationRows: annotationRowsSorted,
+				audioRows: audioRowsSorted,
+				webcamRows: webcamRowsSorted,
+			};
+		}, [items]);
 
 	const { clips } = useTimelinePresentation();
 	const clipPresentation = useMemo(
@@ -749,6 +764,20 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					);
 				})}
 			</Row>
+			{webcamRows.map(({ rowId, items: rowItems }) => (
+				<Row key={rowId} id={rowId} isEmpty={rowItems.length === 0}>
+					{rowItems.map((item) => (
+						<AudioItemWithWaveform
+							key={item.id}
+							item={item}
+							span={item.span}
+							waveformSpan={liveSpanPreviewById?.[item.id] ?? item.span}
+							isSelected={item.id === selectedAudioId}
+							onSelectAudio={onSelectAudio}
+						/>
+					))}
+				</Row>
+			))}
 			{showSourceAudioTrack &&
 				sourceAudioTracks.map((track) => (
 					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
@@ -786,6 +815,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 				compact={
 					annotationRows.length +
 						audioRows.length +
+						webcamRows.length +
 						(showSourceAudioTrack ? sourceAudioTracks.length : 0) >
 					0
 				}

@@ -377,6 +377,7 @@ export function EditorShell(props: Props) {
 						previewAspectRatioValue={previewAspectRatioValue}
 						videoPlaybackRef={ui.videoPlaybackRef}
 						timelineRef={ui.timelineRef}
+						onAddScreenRecording={() => void library.addFromFiles()}
 						currentTime={ui.currentTime}
 						isPlaying={ui.isPlaying}
 						previewVolume={ui.previewVolume}
