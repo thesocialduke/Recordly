@@ -438,6 +438,32 @@ export function EditorShell(props: Props) {
 						<p className="mt-2 text-sm text-muted-foreground">
 							{t("editor.cloud.preparingFootage")}
 						</p>
+						{library.importProgress && (
+							<div className="mt-4 w-64">
+								<div
+									className="h-1.5 overflow-hidden rounded-full bg-muted"
+									role="progressbar"
+									aria-valuemin={0}
+									aria-valuemax={100}
+									aria-valuenow={Math.round(
+										library.importProgress.fraction * 100,
+									)}
+								>
+									<div
+										className="h-full rounded-full bg-primary transition-[width] duration-300"
+										style={{
+											width: `${library.importProgress.fraction * 100}%`,
+										}}
+									/>
+								</div>
+								<p className="mt-2 text-xs tabular-nums text-muted-foreground">
+									{library.importProgress.total > 1
+										? `Video ${library.importProgress.index} of ${library.importProgress.total} · `
+										: ""}
+									{Math.round(library.importProgress.fraction * 100)}%
+								</p>
+							</div>
+						)}
 						<Button
 							className="mt-4"
 							variant="ghost"

@@ -837,6 +837,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	finishRecordingImport: (keepPath: string, commit?: boolean) =>
 		ipcRenderer.invoke("finish-recording-import", keepPath, commit),
 	cancelRecordingImport: () => ipcRenderer.invoke("cancel-recording-import"),
+	onRecordingImportProgress: (callback: (fraction: number) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, fraction: number) =>
+			callback(fraction);
+		ipcRenderer.on("recording-import-progress", listener);
+		return () => ipcRenderer.removeListener("recording-import-progress", listener);
+	},
 	getProjectPreview: (projectPath: string) =>
 		ipcRenderer.invoke("get-project-preview", projectPath),
 	pickVideosForTimeline: () => ipcRenderer.invoke("pick-videos-for-timeline"),

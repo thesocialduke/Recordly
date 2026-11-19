@@ -349,6 +349,10 @@ export function registerProjectHandlers() {
 					recordingPath,
 					webcam,
 					controller.signal,
+					(fraction) => {
+						if (!event.sender.isDestroyed())
+							event.sender.send("recording-import-progress", fraction);
+					},
 				);
 				if (controller.signal.aborted || event.sender.isDestroyed()) {
 					await discardRecordingImport(value.path);

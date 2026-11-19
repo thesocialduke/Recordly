@@ -790,6 +790,7 @@ interface Window {
 			commit?: boolean,
 		) => Promise<{ success: boolean; error?: string }>;
 		cancelRecordingImport: () => Promise<{ success: boolean }>;
+		onRecordingImportProgress: (callback: (fraction: number) => void) => () => void;
 		getProjectPreview: (
 			projectPath: string,
 		) => Promise<

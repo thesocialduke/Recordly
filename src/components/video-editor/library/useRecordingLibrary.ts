@@ -92,6 +92,18 @@ export function useRecordingLibrary(
 	const [importing, setImporting] = useState(false);
 	const cancelled = useRef(false);
 	const [cancelling, setCancelling] = useState(false);
+	/** Which video is being prepared and how far along it is, for the "Adding video" screen. */
+	const [importProgress, setImportProgress] = useState<{
+		index: number;
+		total: number;
+		fraction: number;
+	} | null>(null);
+	useEffect(() => {
+		if (!importing) return;
+		return window.electronAPI.onRecordingImportProgress?.((fraction) =>
+			setImportProgress((previous) => (previous ? { ...previous, fraction } : previous)),
+		);
+	}, [importing]);
 	const cancelImport = async () => {
 		cancelled.current = true;
 		setCancelling(true);
@@ -122,8 +134,10 @@ export function useRecordingLibrary(
 			const addedZooms: ZoomRegion[] = [];
 			let id = "";
 			let completed = 0;
-			for (const path of [...new Set(typeof paths === "string" ? [paths] : paths)]) {
+			const queue = [...new Set(typeof paths === "string" ? [paths] : paths)];
+			for (const path of queue) {
 				if (cancelled.current) break;
+				setImportProgress({ index: completed + 1, total: queue.length, fraction: 0 });
 				const result = await window.electronAPI.importRecording(sourcePath, path, webcam);
 				if (!result.success) {
 					if (cancelled.current) break;
@@ -238,6 +252,7 @@ export function useRecordingLibrary(
 			}
 			lock.current = false;
 			setImporting(false);
+			setImportProgress(null);
 			setCancelling(false);
 		}
 	};
@@ -269,6 +284,7 @@ export function useRecordingLibrary(
 		undo,
 		canUndo: removed.length > 0,
 		importing,
+		importProgress,
 		cancelling,
 		cancelImport,
 		addToTimeline,

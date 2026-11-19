@@ -1,11 +1,10 @@
 import { composeSequenceWebcam, sequenceWebcamOutputs } from "./sequenceWebcam";
 import { probeNativeVideoMetadata } from "../ffmpeg/metadata";
 import { isLibrarySequenceSource } from "./sequenceSource";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import { rememberApprovedLocalReadPath, resolveApprovedLocalMediaPath } from "../project/manager";
@@ -18,13 +17,71 @@ import type {
 	RecordingWebcamSource,
 } from "../../../src/types/recordingLibrary";
 
-const run = promisify(execFile);
-async function ffmpeg(args: string[], signal?: AbortSignal) {
-	await run(
-		getFfmpegBinaryPath(),
-		["-hide_banner", "-loglevel", "error", "-nostdin", "-y", ...args],
-		{ signal, timeout: 60 * 60 * 1000, maxBuffer: 1024 * 1024, windowsHide: true },
-	);
+type Encoder = "videotoolbox" | "x264";
+export type ImportProgress = (fraction: number) => void;
+
+/** Runs ffmpeg; with onTime it reports how many seconds of output are written. */
+function ffmpeg(args: string[], signal?: AbortSignal, onTime?: (seconds: number) => void) {
+	return new Promise<void>((resolve, reject) => {
+		signal?.throwIfAborted();
+		const child = spawn(
+			getFfmpegBinaryPath(),
+			[
+				"-hide_banner",
+				"-loglevel",
+				"error",
+				"-nostdin",
+				"-y",
+				...(onTime ? ["-progress", "pipe:1", "-nostats"] : []),
+				...args,
+			],
+			{ signal, windowsHide: true },
+		);
+		let stderr = "";
+		let pending = "";
+		child.stderr.on("data", (chunk) => {
+			stderr = (stderr + chunk).slice(-4000);
+		});
+		child.stdout.on("data", (chunk) => {
+			if (!onTime) return;
+			const lines = (pending + chunk).split("\n");
+			pending = lines.pop() ?? "";
+			for (const line of lines) {
+				const match = /^out_time_us=(\d+)/.exec(line);
+				if (match) onTime(Number(match[1]) / 1_000_000);
+			}
+		});
+		const timer = setTimeout(() => child.kill("SIGKILL"), 60 * 60 * 1000);
+		child.on("error", (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
+		child.on("close", (code, killSignal) => {
+			clearTimeout(timer);
+			if (code === 0) resolve();
+			else if (signal?.aborted) reject(signal.reason ?? new Error("Import cancelled"));
+			else reject(new Error(`ffmpeg failed (${code ?? killSignal}): ${stderr.trim()}`));
+		});
+	});
+}
+
+/** The Mac's hardware encoder is about twice as fast as x264 for Retina 60fps footage. */
+function videoEncoderArgs(encoder: Encoder) {
+	return encoder === "videotoolbox"
+		? ["-c:v", "h264_videotoolbox", "-q:v", "75", "-allow_sw", "1"]
+		: ["-c:v", "libx264", "-preset", "fast", "-crf", "18"];
+}
+
+/** Earlier imports were encoded with x264, which tags its first frame; streams only join cleanly when encoders match. */
+async function sequenceEncoder(file: string): Promise<Encoder> {
+	const handle = await fs.open(file, "r");
+	try {
+		const buffer = Buffer.alloc(4 * 1024 * 1024);
+		const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+		return buffer.subarray(0, bytesRead).includes("x264 - core") ? "x264" : "videotoolbox";
+	} finally {
+		await handle.close();
+	}
 }
 async function probe(file: string, signal?: AbortSignal) {
 	const meta = await probeNativeVideoMetadata(getFfmpegBinaryPath(), file, signal);
@@ -43,9 +100,11 @@ async function normalize(
 	file: string,
 	out: string,
 	format: Format,
-	copyVideo: boolean,
+	encoder: Encoder | null,
 	signal?: AbortSignal,
+	onTime?: (seconds: number) => void,
 ) {
+	const copyVideo = encoder === null;
 	const meta = await probe(file, signal);
 	const candidates = await getUsableCompanionAudioCandidates(file);
 	const companion = candidates[0];
@@ -97,12 +156,10 @@ async function normalize(
 		"[system]",
 		"-map",
 		"[mic]",
-		"-c:v",
-		copyVideo ? "copy" : "libx264",
+		...(copyVideo ? ["-c:v", "copy"] : videoEncoderArgs(encoder)),
 	);
-	if (!copyVideo) args.push("-preset", "fast", "-crf", "18");
 	args.push("-c:a", "pcm_s16le", "-t", String(meta.duration), out);
-	await ffmpeg(args, signal);
+	await ffmpeg(args, signal, onTime);
 }
 
 /** The editor and export share one immutable source, with stable offsets across imports. */
@@ -111,6 +168,7 @@ export async function importRecording(
 	recordingPath: string,
 	currentWebcam?: RecordingWebcamSource,
 	signal?: AbortSignal,
+	onProgress?: ImportProgress,
 ): Promise<RecordingImportResult> {
 	const entry = (await listRecordings()).find((entry) => entry.path === recordingPath);
 	if (!entry) throw new Error("Recording is no longer in Videos");
@@ -134,10 +192,39 @@ export async function importRecording(
 	try {
 		const normalizedBase = path.join(work, "base.mkv");
 		const normalizedNew = path.join(work, "new.mkv");
-		// Only our own normalized source format may be copied across appends.
-		const copyVideo = isLibrarySequenceSource(current);
-		await normalize(current, normalizedBase, format, copyVideo, signal);
-		await normalize(entry.path, normalizedNew, format, false, signal);
+		const added = await probe(entry.path, signal);
+		const isSequence = isLibrarySequenceSource(current);
+		const existingEncoder = isSequence ? await sequenceEncoder(current) : null;
+		const encode = async (encoder: Encoder) => {
+			// Only our own normalized source format may be copied, and only when encoders match.
+			const copyBase = existingEncoder === encoder;
+			const total = (copyBase ? 0 : base.duration) + added.duration || 1;
+			let done = 0;
+			const report = (seconds: number) =>
+				onProgress?.(Math.min(0.99, (done + Math.max(0, seconds)) / total));
+			report(0);
+			await normalize(
+				current,
+				normalizedBase,
+				format,
+				copyBase ? null : encoder,
+				signal,
+				copyBase ? undefined : report,
+			);
+			if (!copyBase) done += base.duration;
+			await normalize(entry.path, normalizedNew, format, encoder, signal, report);
+		};
+		if (process.platform === "darwin") {
+			try {
+				await encode("videotoolbox");
+			} catch (error) {
+				signal?.throwIfAborted();
+				console.warn("Hardware encoding failed; retrying with x264", error);
+				await encode("x264");
+			}
+		} else {
+			await encode("x264");
+		}
 		const baseMeta = await probe(normalizedBase, signal);
 		const newMeta = await probe(normalizedNew, signal);
 		await fs.writeFile(path.join(work, "list.txt"), "file 'base.mkv'\nfile 'new.mkv'\n");
@@ -194,7 +281,7 @@ export async function importRecording(
 		const samples = [];
 		for (const [file, offset, meta] of [
 			[current, 0, base],
-			[entry.path, sourceStartMs, await probe(entry.path, signal)],
+			[entry.path, sourceStartMs, added],
 		] as const) {
 			let points: ReturnType<typeof normalizeCursorTelemetrySamples> = [];
 			try {
